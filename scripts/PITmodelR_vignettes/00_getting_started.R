@@ -3,7 +3,7 @@
 # Purpose: Initial testing of ryankinzer/PITmodelR
 # 
 # Created Date: November 4, 2025
-#   Last Modified:
+#   Last Modified: November 5, 2025
 #
 # Notes: 
 
@@ -31,7 +31,7 @@ project_yrs   = get_project_years(code = "CDR")     # available years for a proj
 files_df = get_mrr_files(code = "CDR", year = 2024) # df of mrr files for given project and year
 
 # get data for one mrr file
-mrr_file = get_file_data(files_df$name[1])
+mrr_file = get_file_data(files_df$name[1], return = "list")
 
 # view objects in mrr_file
 mrr_file$session

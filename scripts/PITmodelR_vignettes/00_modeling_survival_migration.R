@@ -27,4 +27,4 @@ library(tidyverse)
 # 1) retrieve and inspect data
 
 # pull site observations (auto-paginates by default)
-obs = get_site_observations(site_code = "LGR", year = 2023)
+obs = get_site_observations(site_code = "ZEN", year = 2023)

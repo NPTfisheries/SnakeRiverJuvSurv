@@ -78,7 +78,8 @@ mark_group = sct_24_df %>%
          !grepl("Y", conditional_comments))
 
 # get tag history for a single tag
-tag_history = get_tag_history(tag_code = mark_group$pittag[1])
+tag_history = get_tag_history(tag_code = mark_group$pittag[1],
+                              fields = c("tag_code", "site_code", "event_type", "event_date", "event_count"))
 
 # get tag history for a list of tags
 tag_history = get_batch_tag_histories(tag_codes = mark_group$pittag)
@@ -109,7 +110,7 @@ res = build_mark_histories(
   keep_unknown = F
 )
 
-# save, view some things from res
+# view some things from res
 res$dropped_summary
 res$mapping
 

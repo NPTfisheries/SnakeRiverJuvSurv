@@ -55,14 +55,14 @@ sct_24_ls = get_batch_file_data(
   use_codes_on_conflict = TRUE # prefer consistent code columns across files
 )
 
-names(sct_24_ls$files)                  # list of all individual files
-sct_24_ls$files$`CDR-2024-101-SCT.xml`  # look at data for a single file
+names(sct_24_ls$sessions)                  # list of all individual files
+sct_24_ls$sessions$`CDR-2024-101-SCT.xml`  # look at data for a single file
 
 # list mismatch issues
 sct_24_ls$issues
 
 # combine session and event data into a single df
-sct_24_df = sct_24_ls$combined
+sct_24_df = sct_24_ls$events
 
 #------------------------
 # Set Up Survival Studies

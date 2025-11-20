@@ -20,7 +20,6 @@ rm(list = ls())
 library(PITmodelR)
 library(tidyverse)
 
-
 #---------------
 # Project Data
 
@@ -44,7 +43,9 @@ proj_codes = c("AAB", # Alan Byrne Projects
 proj_yrs = map_dfr(proj_codes, function(cd) {
   yrs = get_project_years(cd)
   tibble(code = cd, year = yrs)  
-})
+}) %>%
+  # just deal with more recent data, for now
+  filter(year >= 2020)
 
 # retrieve mrr files for each project code and year
 all_files = proj_yrs %>%
@@ -57,14 +58,16 @@ all_files = proj_yrs %>%
   # duplicative with projectCode
   select(-code)
 
-# reduce all_files to reasonable number
+# check file types
+table(all_files$projectCode, all_files$fileTypeExtension)
+table(all_files$year, all_files$fileTypeExtension)
+
+# let's just deal with .xml files, for now
 mrr_files = all_files %>%
-  # deal with only .xml files for now
-  filter(fileTypeExtension == ".xml",
-         year >= 2020)
+  filter(fileTypeExtension == ".xml")
 
 #---------------------------------------------------------
-# safely retrieve mrr data for each proj_yrs in mrr_files
+# Safely Retrieve MRR Data for Each proj_yrs in mrr_files
 
 # create directory to save output
 out_dir = "./output/mrr_data"
@@ -82,7 +85,7 @@ walk(seq_len(nrow(proj_yrs)), function(i) {
     filter(projectCode == cd, year == yr)
   
   # tryCatch to avoid breaking on errors
-  res = tryCatch({
+  mrr_ls = tryCatch({
     get_batch_file_data(
       filenames = py_files$name,
       keep_code_cols = FALSE,
@@ -96,24 +99,37 @@ walk(seq_len(nrow(proj_yrs)), function(i) {
   })
   
   # skip saving if result is NULL
-  if (is.null(res)) return(NULL)
+  if (is.null(mrr_ls)) return(NULL)
   
   # save the result
   sub_dir = file.path(out_dir, cd) 
   if (!dir.exists(sub_dir)) dir.create(sub_dir, recursive = TRUE)
-  out_file = file.path(sub_dir, paste0("mrr_", yr, ".rda"))
-  save(res, file = out_file)
+  save(mrr_ls, file = file.path(sub_dir, paste0("mrr_", cd, "_", yr, ".rda")))
   message("Saved ", out_file)
 })
 
-# retrieve mrr data for all_files
-# mrr_df = get_batch_file_data(
-#   filenames = mrr_files$name,
-#   keep_code_cols = FALSE,
-#   label_conflict = "suffix",
-#   use_codes_on_conflict = TRUE
-# )
+#---------------------------------------------------------
+# Compile All MRR Lists from Above
 
+# path to mrr_ls files
+mrr_ls_files = list.files(
+  path = "./output/mrr_data",
+  pattern = "\\.rda",
+  full.names = T,
+  recursive = T
+)
 
+all_mrr_ls = lapply(mrr_ls_files, function(f) {
+  env = new.env()
+  load(f, envir = env)
+  obj = ls(env)[1]
+  get(obj, envir = env)
+})
+
+combined_mrr = list(
+  sessions = bind_rows(lapply(all_mrr_ls, `[[`, "sessions")),
+  events   = bind_rows(lapply(all_mrr_ls, `[[`, "events")),
+  issues   = bind_rows(lapply(all_mrr_ls, `[[`, "issues"))
+)
 
 ### END SCRIPT

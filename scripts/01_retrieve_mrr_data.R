@@ -15,7 +15,7 @@
 rm(list = ls())
 
 # install PITmodelR, if needed
-#remotes::install_github("ryankinzer/PITmodelR", ref = "ma_develop", build_vignettes = T, force = T)
+#remotes::install_github("ryankinzer/PITmodelR", ref = "develop", build_vignettes = T, force = T)
 
 # load libraries
 library(PITmodelR)
@@ -85,54 +85,71 @@ all_files = proj_yrs %>%
 table(all_files$projectCode, all_files$fileTypeExtension)
 table(all_files$year, all_files$fileTypeExtension)
 
-# let's just deal with .xml files, for now
-mrr_files = all_files %>%
-  filter(fileTypeExtension == ".xml")
-
 #---------------------------------------------------------
 # Safely Retrieve MRR Data for Each proj_yrs in mrr_files
+
+# OPTIONAL: combinations to actually retrieve (skip to retrieve all)
+combos_to_retrieve = tibble(
+  code = c("CDR", "GAA", "NPC"),
+  year = 2025
+)
+
+# if no combos provided, retrieve all project-year combinations
+if (!exists("combos_to_retrieve") || is.null(combos_to_retrieve)) {
+  targets = proj_yrs
+} else {
+  targets = proj_yrs %>%
+    inner_join(combos_to_retrieve,
+               by = c("code", "year"))
+}
+
+# filter all_files based on targets
+mrr_files = all_files %>%
+  inner_join(targets,
+             by = c("projectCode" = "code", "year" = "year"))
 
 # create directory to save output
 out_dir = "./output/mrr_ptagis_retrievals"
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
-# loop over each code x year and save results
-walk(seq_len(nrow(proj_yrs)), function(i) {
-  
-  cd = proj_yrs$code[i]
-  yr = proj_yrs$year[i]
-  
-  message("Retrieving data for MRR project code ", cd, ", year ", yr)
-  
-  # filter files for each project and year
-  py_files = mrr_files %>%
-    filter(projectCode == cd, year == yr)
-  
-  # tryCatch to avoid breaking on errors
-  mrr_ls = tryCatch({
-    get_batch_file_data(
-      filenames = py_files$name,
-      keep_code_cols = FALSE,
-      label_conflict = "suffix",
-      use_codes_on_conflict = TRUE
-    )
-  }, 
-  # errors largely resolved by bug fix to check_pdv_label_consistency()
-  error = function(e) {
-    message("ERROR: Failed for projectCode ", cd, " year", yr)
-    message("Details: ", e$message)
-    return(NULL) # continue to next
-  })
-  
-  # skip saving if result is NULL
-  if (is.null(mrr_ls)) return(NULL)
-  
-  # save the result
-  sub_dir = file.path(out_dir, cd) 
-  if (!dir.exists(sub_dir)) dir.create(sub_dir, recursive = TRUE)
-  out_file = file.path(sub_dir, paste0("mrr_", cd, "_", yr, ".rda"))
-  save(mrr_ls, file = out_file)
-  message("Saved ", out_file)
-})
+# loop over each project-year in targets table
+pwalk(
+  .l = list(cd = targets$code, yr = targets$year),
+  .f = function(cd, yr) {
+    
+    message("Retrieving data for MRR project code ", cd, ", year ", yr)
+    
+    # files for this combo
+    py_files = mrr_files %>%
+      filter(projectCode == cd, year == yr)
+    
+    # tryCatch() to avoid breaking on errors
+    mrr_ls = tryCatch({
+      get_batch_file_data(
+        filenames = py_files$name,
+        keep_code_cols = FALSE,
+        label_conflict = "suffix",
+        use_codes_on_conflict = TRUE
+      )
+    }, 
+    # errors largely resolved by bug fix to check_pdv_label_consistency()
+    error = function(e) {
+      message("ERROR: Failed for projectCode ", cd, " year", yr)
+      message("Details: ", e$message)
+      return(NULL) # continue to next
+    })
+    
+    if (is.null(mrr_ls)) return(NULL)
+    
+    # save output
+    sub_dir = file.path(out_dir, cd)
+    if (!dir.exists(sub_dir)) dir.create(sub_dir, recursive = TRUE)
+    
+    out_file = file.path(sub_dir, paste0("mrr_", cd, "_", yr, ".rda"))
+    save(mrr_ls, file = out_file)
+    
+    message("Saved ", out_file)
+  }
+)
 
 ### END SCRIPT

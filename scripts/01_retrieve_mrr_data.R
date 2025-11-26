@@ -67,7 +67,7 @@ proj_yrs = map_dfr(proj_codes, function(cd) {
   yrs = get_project_years(cd)
   tibble(code = cd, year = yrs)  
 }) %>%
-  # just deal with more recent data, for now
+  # just deal with more recent data, for now (avoid .txt files)
   filter(year >= 2020)
 
 # retrieve mrr file info for each project code and year

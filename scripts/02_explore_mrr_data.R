@@ -29,11 +29,37 @@ mrr_ls_files = list.files(
   recursive = T
 )
 
+# compile mrr_ls_files
 all_mrr_ls = map(mrr_ls_files, function(f) {
   e = new.env()
   load(f, envir = e)
   e[[ls(e)[1]]]
 })
+
+# diagnosing column type conflicts
+type_map <- map(all_mrr_ls, ~ .x$events) %>% 
+  imap_dfr(function(df, name) {
+    tibble(
+      file = name,
+      col  = names(df),
+      class = purrr::map_chr(df, ~ paste(class(.x), collapse = ","))
+    )
+  })
+
+type_conflicts <- type_map %>%
+  group_by(col) %>%
+  summarise(n_types = n_distinct(class),
+            classes = paste(unique(class), collapse = " | "),
+            .groups = "drop") %>%
+  filter(n_types > 1)
+
+all_events_df = map(all_mrr_ls, "events") %>% bind_rows()
+all_issues_df = map(all_mrr_ls, "issues") %>% bind_rows()
+
+# all_sessions_df = all_mrr_ls %>%
+#   map(~ bind_rows(.x$sessions)) %>%
+#   bind_rows()
+
 
 # combine all mrr_ls files into a single list
 # all_mrr_ls = lapply(mrr_ls_files, function(f) {

@@ -53,28 +53,10 @@ type_conflicts <- type_map %>%
             .groups = "drop") %>%
   filter(n_types > 1)
 
+# ignore sessions for now
 all_events_df = map(all_mrr_ls, "events") %>% bind_rows()
 all_issues_df = map(all_mrr_ls, "issues") %>% bind_rows()
 
-# all_sessions_df = all_mrr_ls %>%
-#   map(~ bind_rows(.x$sessions)) %>%
-#   bind_rows()
-
-
-# combine all mrr_ls files into a single list
-# all_mrr_ls = lapply(mrr_ls_files, function(f) {
-#   env = new.env()
-#   load(f, envir = env)
-#   obj = ls(env)[1]
-#   get(obj, envir = env)
-# })
-
-# combine into a single list
-# combined_mrr = list(
-#   sessions = bind_rows(lapply(all_mrr_ls, `[[`, "sessions")),
-#   events   = bind_rows(lapply(all_mrr_ls, `[[`, "events")),
-#   issues   = bind_rows(lapply(all_mrr_ls, `[[`, "issues"))
-# )
 
 # let's just deal with mrr events for now
 events_df = bind_rows(lapply(all_mrr_ls, `[[`, "events"))

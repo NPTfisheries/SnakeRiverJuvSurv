@@ -18,49 +18,70 @@ rm(list = ls())
 library(PITmodelR)
 library(tidyverse)
 
+#---------------
+# MRR Sites of Interest
+mrr_sites_of_interest = tribble(
+  ~location, ~capture_method, ~udl, ~release_site,
+  "Lake Creek",    "SCREWT",                       "LCT", NA,                    # before 2020
+  "Upper Secesh",  "SCREWT",                       "SRT", NA,                    # before 2020
+  "Upper Secesh",  c("BSEINE", "PSEINE", "SHOCK"), NA,    c("LAKEC", "SECESR"),  # GAA     
+  "Lower Secesh",  "SCREWT",                       "SCT", c("SECTRP", "SECESR"), # CDR
+  "Lick Creek",    "SCREWT",                       NA,    NA,                    # before 2020
+  "Upper SFSR",    "SCREWT",                       NA,    NA,                    # before 2020
+  "Upper SFSR",    c("BSEINE", "PSEINE", "SHOCK"), NA,    c("KNOXB", "SALRSF"),  # GAA
+  "Johnson Creek", "SCREWT",                       "JCT", c("JOHTRP", "JOHNSC"), # CDR
+  "SFSR Krassel",  "SCREWT",                       NA,    "SFSRKT",              # MAP
+  "Big Creek",     c("BSEINE", "PSEINE", "SHOCK"), NA,    "BIG2C",               # GAA
+  "Big Creek",     "SCREWT",                       NA,    "BIG2CT",              # MAP
+  "Newsome Creek", "SCREWT",                       NA,    NA,                    # SCS?
+  "SF Clearwater", "SCREWT",                       NA,    "SFCTRP",              # NPC
+  "Lolo Creek",    "SCREWT",                       NA,    "LOLTRP",              # SCS?
+  "Imnaha River",  "SCREWT",                       NA,    "IMNTRP"               # IMN
+)
+
 #---------------------------------------------------------
-# Compile MRR Lists from 01_retrieve_mrr_data.R
+# Compile MRR Outputs from 01_retrieve_mrr_data.R
 
 # get paths to all mrr_ls .rda files
 mrr_ls_files = list.files(
   path = "./output/mrr_ptagis_retrievals/",
-  pattern = "\\.rda",
+  pattern = "\\.rda$",
   full.names = T,
   recursive = T
 )
 
-# compile mrr_ls_files
-all_mrr_ls = map(mrr_ls_files, function(f) {
-  e = new.env()
-  load(f, envir = e)
-  e[[ls(e)[1]]]
-})
+read_rda_object <- function(path) {
+  e <- new.env(parent = emptyenv())
+  load(path, envir = e)
+  obj_name <- ls(e)[1]   # assume exactly one object saved
+  e[[obj_name]]
+}
 
-# diagnosing column type conflicts
-type_map <- map(all_mrr_ls, ~ .x$events) %>% 
-  imap_dfr(function(df, name) {
-    tibble(
-      file = name,
-      col  = names(df),
-      class = purrr::map_chr(df, ~ paste(class(.x), collapse = ","))
-    )
-  })
+all_mrr_ls <- purrr::set_names(
+  purrr::map(mrr_ls_files, read_rda_object),
+  basename(mrr_ls_files)   # name each element by the .rda file for provenance
+)
 
-type_conflicts <- type_map %>%
-  group_by(col) %>%
-  summarise(n_types = n_distinct(class),
-            classes = paste(unique(class), collapse = " | "),
-            .groups = "drop") %>%
-  filter(n_types > 1)
+# helper: safely pull a component that may/may not exist
+get_comp <- function(x, nm) {
+  if (is.list(x) && !is.null(x[[nm]]) && is.data.frame(x[[nm]])) {
+    tibble::as_tibble(x[[nm]])
+  } else {
+    tibble::tibble()
+  }
+}
 
-# ignore sessions for now
-all_events_df = map(all_mrr_ls, "events") %>% bind_rows()
-all_issues_df = map(all_mrr_ls, "issues") %>% bind_rows()
+sessions_df <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "sessions"), rda = .y))
+events_df   <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "events"),   rda = .y))
+pdv_map_df  <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "pdv_map"),  rda = .y))
 
-
-# let's just deal with mrr events for now
-events_df = bind_rows(lapply(all_mrr_ls, `[[`, "events"))
+# test a join
+events_plus_session = events_df %>%
+  left_join(
+    sessions_df,
+    by = "file_name"
+  )
 
 # which release sites are in each mrr project?
-table(events_df$release_site, events_df$mrrproject)
+table(events_plus_session$release_site, events_plus_session$mrr_project)
 

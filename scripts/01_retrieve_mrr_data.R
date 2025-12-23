@@ -15,7 +15,7 @@
 rm(list = ls())
 
 # install PITmodelR, if needed
-#remotes::install_github("ryankinzer/PITmodelR", ref = "develop", force = T)
+#remotes::install_github("ryankinzer/PITmodelR", ref = "develop", force = T, build_vignettes = T)
 
 # load libraries
 library(PITmodelR)

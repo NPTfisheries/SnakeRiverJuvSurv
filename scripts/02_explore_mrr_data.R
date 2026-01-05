@@ -4,7 +4,7 @@
 #   for creating mark groups.
 # 
 # Created Date: November 18, 2025
-#   Last Modified: November 20, 2025
+#   Last Modified: January 5, 2026
 #
 # Notes: 
 
@@ -42,46 +42,39 @@ mrr_sites_of_interest = tribble(
 #---------------------------------------------------------
 # Compile MRR Outputs from 01_retrieve_mrr_data.R
 
-# get paths to all mrr_ls .rda files
-mrr_ls_files = list.files(
+# get paths to all mrr data retrieval .rda files
+mrr_files = list.files(
   path = "./output/mrr_ptagis_retrievals/",
   pattern = "\\.rda$",
   full.names = T,
   recursive = T
 )
 
-read_rda_object <- function(path) {
-  e <- new.env(parent = emptyenv())
-  load(path, envir = e)
-  obj_name <- ls(e)[1]   # assume exactly one object saved
-  e[[obj_name]]
+# read all .rda files
+all_mrr = mrr_files %>%
+  set_names(basename(.)) %>%
+  map(~{
+    e = new.env(parent = emptyenv())
+    nm = load(.x, envir = e)
+    e[[nm[[1]]]]
+  })
+
+safe_tbl <- function(comp) {
+  purrr::possibly(~ dplyr::as_tibble(.x), otherwise = tibble())(comp)
 }
 
-all_mrr_ls <- purrr::set_names(
-  purrr::map(mrr_ls_files, read_rda_object),
-  basename(mrr_ls_files)   # name each element by the .rda file for provenance
-)
+# compile sessions, events, and (optionally) pdv mapping
+sessions_df <- imap_dfr(all_mrr, ~ safe_tbl(purrr::pluck(.x, "sessions")) %>% mutate(rda = .y))
+events_df   <- imap_dfr(all_mrr, ~ safe_tbl(purrr::pluck(.x, "events"))   %>% mutate(rda = .y))
+#pdv_map_df  <- imap_dfr(all_mrr, ~ safe_tbl(purrr::pluck(.x, "pdv_map"))  %>% mutate(rda = .y))
 
-# helper: safely pull a component that may/may not exist
-get_comp <- function(x, nm) {
-  if (is.list(x) && !is.null(x[[nm]]) && is.data.frame(x[[nm]])) {
-    tibble::as_tibble(x[[nm]])
-  } else {
-    tibble::tibble()
-  }
-}
-
-sessions_df <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "sessions"), rda = .y))
-events_df   <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "events"),   rda = .y))
-pdv_map_df  <- purrr::imap_dfr(all_mrr_ls, ~ dplyr::mutate(get_comp(.x, "pdv_map"),  rda = .y))
-
-# test a join
-events_plus_session = events_df %>%
+# join session info to events
+events_session_df = events_df %>%
   left_join(
     sessions_df,
     by = "file_name"
   )
 
 # which release sites are in each mrr project?
-table(events_plus_session$release_site, events_plus_session$mrr_project)
+table(events_session_df$release_site, events_session_df$mrr_project)
 

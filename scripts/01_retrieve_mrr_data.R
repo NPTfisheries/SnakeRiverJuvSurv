@@ -4,7 +4,7 @@
 #   and write responses from get_batch_file_data() to file.
 # 
 # Created Date: November 18, 2025
-#   Last Modified: November 20, 2025
+#   Last Modified: January 5, 2026
 #
 # Notes: 
 
@@ -36,8 +36,7 @@ proj_codes = c("AAB", # Alan Byrne Projects
                "NPM", # Idaho Natural Production Monitoring and Evaluation Project
                "PAK", # Paul Kucera Projects
                "RNK", # Ryan Kinzer Projects
-               "SCS"  # Sherman Sprague Projects
-  )
+               "SCS") # Sherman Sprague Projects
   
 # get years for each proj_codes
 proj_yrs = map_dfr(proj_codes, function(cd) {
@@ -68,10 +67,10 @@ table(all_files$year, all_files$fileTypeExtension, all_files$projectCode)
 # Safely Retrieve MRR Data for Each proj_yrs in mrr_files
 
 # OPTIONAL: combinations to actually retrieve (skip to retrieve all)
-combos_to_retrieve = crossing(
-  code = c("CDR", "GAA"),
-  year = 2025
-)
+# combos_to_retrieve = crossing(
+#   code = c("CDR", "GAA"),
+#   year = 2025
+# )
 
 # if no combos provided, retrieve all project-year combinations
 if (!exists("combos_to_retrieve") || is.null(combos_to_retrieve)) {

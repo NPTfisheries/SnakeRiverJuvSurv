@@ -44,7 +44,7 @@ mrr_sites_of_interest = tribble(
 
 # get paths to all mrr data retrieval .rda files
 mrr_files = list.files(
-  path = "./output/mrr_ptagis_retrievals/",
+  path = "./data/mrr_ptagis_retrievals/",
   pattern = "\\.rda$",
   full.names = T,
   recursive = T

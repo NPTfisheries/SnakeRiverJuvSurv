@@ -26,6 +26,7 @@ library(tidyverse)
 
 # project codes of interest
 proj_codes = c("AAB", # Alan Byrne Projects
+               "BDA", # Bill Arnsberg Projects
                "CDR", # Craig Rabe Projects
                "GAA", # Gordon Axel Projects
                "IMN", # Nez Perce Tribe Imnaha Basin Project
@@ -35,6 +36,7 @@ proj_codes = c("AAB", # Alan Byrne Projects
                "NPC", # NPT Supplementation Eval
                "NPM", # Idaho Natural Production Monitoring and Evaluation Project
                "PAK", # Paul Kucera Projects
+               "PJC", # Grande Ronde Supplementation LR M&E
                "RNK", # Ryan Kinzer Projects
                "SCS") # Sherman Sprague Projects
   
@@ -66,10 +68,10 @@ table(all_files$year, all_files$fileTypeExtension, all_files$projectCode)
 #---------------------------------------------------------
 # Safely Retrieve MRR Data for Each proj_yrs in mrr_files
 
-# OPTIONAL: combinations to actually retrieve (skip to retrieve all)
+#OPTIONAL: combinations to actually retrieve (skip to retrieve all)
 # combos_to_retrieve = crossing(
-#   code = c("CDR", "GAA"),
-#   year = 2025
+#   code = c("BDA", "PJC"),
+#   year = 2010:2025
 # )
 
 # if no combos provided, retrieve all project-year combinations
@@ -88,7 +90,7 @@ mrr_files = all_files %>%
              by = c("projectCode" = "code", "year" = "year"))
 
 # create directory to save output
-out_dir = "./output/mrr_ptagis_retrievals"
+out_dir = "./data/mrr_ptagis_retrievals"
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
 # loop over each project-year in targets table
@@ -106,8 +108,8 @@ pwalk(
     mrr_ls = tryCatch({
       get_batch_file_data(
         filenames = py_files$name,
-        pdvs      = "drop",
-        map_pdvs  = FALSE
+        pdvs      = "attach",
+        map_pdvs  = TRUE
       )
     }, 
     # errors largely resolved by bug fix to check_pdv_label_consistency()

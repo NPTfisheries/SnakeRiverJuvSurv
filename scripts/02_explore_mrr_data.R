@@ -77,4 +77,6 @@ events_session_df = events_df %>%
 
 # which release sites are in each mrr project?
 table(events_session_df$release_site, events_session_df$mrr_project)
+table(events_session_df$mrr_project, events_session_df$capture_method)
 
+### END SCRIPT

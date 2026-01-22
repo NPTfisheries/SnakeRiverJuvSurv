@@ -4,7 +4,7 @@
 #   and write responses from get_batch_file_data() to file.
 # 
 # Created Date: November 18, 2025
-#   Last Modified: January 5, 2026
+#   Last Modified: January 22, 2026
 #
 # Notes: 
 
@@ -35,6 +35,7 @@ proj_codes = c("AAB", # Alan Byrne Projects
                "MAP", # McCall Anadromous Projects
                "NPC", # NPT Supplementation Eval
                "NPM", # Idaho Natural Production Monitoring and Evaluation Project
+               "OGR", # ODFW Grande Ronde River Research Projects
                "PAK", # Paul Kucera Projects
                "PJC", # Grande Ronde Supplementation LR M&E
                "RNK", # Ryan Kinzer Projects
@@ -69,10 +70,10 @@ table(all_files$year, all_files$fileTypeExtension, all_files$projectCode)
 # Safely Retrieve MRR Data for Each proj_yrs in mrr_files
 
 #OPTIONAL: combinations to actually retrieve (skip to retrieve all)
-# combos_to_retrieve = crossing(
-#   code = c("BDA", "PJC"),
-#   year = 2010:2025
-# )
+combos_to_retrieve = crossing(
+  code = "OGR",
+  year = 2011:2025
+)
 
 # if no combos provided, retrieve all project-year combinations
 if (!exists("combos_to_retrieve") || is.null(combos_to_retrieve)) {

@@ -71,8 +71,8 @@ table(all_files$year, all_files$fileTypeExtension, all_files$projectCode)
 
 #OPTIONAL: combinations to actually retrieve (skip to retrieve all)
 combos_to_retrieve = crossing(
-  code = "OGR",
-  year = 2011:2025
+  code = c("BDA","CDR","IMN","NPC","PJC","SCS"),
+  year = 2025
 )
 
 # if no combos provided, retrieve all project-year combinations

@@ -80,3 +80,26 @@ table(events_session_df$release_site, events_session_df$mrr_project)
 table(events_session_df$mrr_project, events_session_df$capture_method)
 
 ### END SCRIPT
+
+npt_lamprey_df = events_session_df %>%
+  mutate(event_year = year(event_date)) %>%
+  filter(species_run_rear_type %in% c("A0W", "K0W", "L0W", "AOH"),
+         event_year == 2025,
+         organization == "NPT")
+
+npt_lamprey_summ = npt_lamprey_df %>%
+  mutate(event_date = as.Date(event_date)) %>%
+  group_by(species_run_rear_type, migration_year, capture_method, event_site, release_site, event_date) %>%
+  summarise(
+    n_tally = sum(str_detect(event_type, "Tally"), na.rm = TRUE),
+    n_mark  = sum(str_detect(event_type, "Mark"),  na.rm = TRUE),
+    .groups = "drop"
+  )
+
+library(writexl)
+write_xlsx(
+  list(summary = npt_lamprey_summ,
+       data = npt_lamprey_df),
+  path = "output/npt_lamprey_submitted_to_ptagis_my2025.xlsx"
+)
+

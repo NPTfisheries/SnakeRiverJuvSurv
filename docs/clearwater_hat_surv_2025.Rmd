@@ -1,0 +1,226 @@
+---
+title: "Clearwater Basin Juvenile Hatchery Fish Survival: Spring and Fall Chinook Salmon, Coho Salmon, and Steelhead"
+author: "Ryan N. Kinzer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-libs}
+library(tidyverse)
+library(PITmodelR)
+```
+
+```{r set-params}
+yr = 2025
+spp_code <- '11H'
+project_codes <- c('BDL', 'CBB', 'CSS', 'SCS', 'SMP')
+clw_release_site <- c('CLWHNF', 'DWORNF', 'NPTH')
+```
+
+
+```{r get-data, eval = FALSE}
+# retrieve mrr file info for each project code and year
+
+safe_get_mrr <- possibly(
+  ~ get_mrr_files(code = .x, year = .y),
+  otherwise = NULL
+)
+
+all_files_ls <- map(
+  project_codes,
+  function(x, y) {
+    out <- safe_get_mrr(x, y = yr)
+    if (is.null(out)) warning("Warning: Failed for project code: ", x, " and year: ", y)
+    out
+  }
+  ) %>%
+  compact()
+
+all_files <- all_files_ls %>%
+  bind_rows() %>%
+  mutate(user_ext = str_extract(name, "(?<=-)([A-Za-z0-9]{3})(?=\\.)"))
+
+mrr_dat_ls <- get_batch_file_data(all_files$name,
+                                  keep_code_cols = TRUE, 
+                                  label_conflict = "suffix",
+                                  use_codes_on_conflict = TRUE)
+
+saveRDS(mrr_dat_ls, paste0("../output/mrr_files/clearwater_events_",yr,".rds"))
+```
+
+```{r load-data}
+mrr_dat_ls <- readRDS(paste0("../output/mrr_files/clearwater_events_",yr,".rds"))
+
+events <- mrr_dat_ls$events
+
+tmp <- events %>%
+  filter(mrr_project == 'BDL',
+         species_run_rear_type == spp_code,
+         event_type == 'Mark')
+
+table(tmp$release_site)
+
+```
+
+```{r spchn-dat}
+rel_site <- 'DWORNF'
+project_code <- 'CSS'
+
+tags <- events %>%
+  ungroup() %>%
+  filter(mrr_project == project_code,
+         release_site == rel_site,
+         species_run_rear_type == spp_code,
+         event_type == 'Mark'
+         )
+
+unique(tags$release_site)
+n_distinct(tags$pit_tag)
+```
+
+
+```{r get-obs, eval = FALSE}
+api_key <- "1AA5CF55-C98E-4001-96E4-1E96CEE1E806"
+Sys.setenv(PTAGIS_API_KEY = api_key)
+
+obs <- get_batch_tag_histories(tag_codes = unique(tags$pit_tag))
+# started 3:23
+saveRDS(obs, paste0("../output/int_files/",rel_site,"_int_",yr,".rds"))
+```
+
+```{r define-locs}
+obs <- readRDS(paste0("../output/int_files/",rel_site,"_int_",yr,".rds"))
+table(obs$site_code)
+
+# all sites, past and present
+obs_sites <- get_interrogation_sites(active_only = FALSE)
+
+# filter to INT sites in tag_history$site_code
+my_sites = obs_sites %>%
+  filter(site_code %in% unique(obs$site_code))
+
+locs <- list(
+  DWOR = "DWOR", # site_code is showing the event_site from the MRR file which is the mark site
+  #LAP    = "LAP",
+  CWR    = "CWR",
+  LGR    = c("GRJ", "GRS"), # Lower Granite Juvenile Bypass (J) and Spillway (S)
+  MCJ = "MCJ",
+  # upstream -> downstream
+  Down   = c(
+    #"GOJ",                     # Little Goose Dam
+    #"LMJ",                     # Lower Monumental Dam
+    #"ICH",                     # Ice Harbor Dam
+    #"MCJ",                     # McNary Dam
+    "JDJ",                     # John Day Dam
+    "B2J", "BCC",              # Bonneville Dam
+    "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX" # Lower Columbia & Estuary
+    )
+  )
+
+```
+
+
+```{r build-ch}
+ch_list <- build_mark_histories(
+  tag_history  = obs,
+  locs_def     = locs,
+  site_col     = "site_code",
+  tag_col      = "tag_code",
+  #time_col     = "event_time",  # optional but helps order ties/revisits
+  enforce_order = TRUE
+)
+```
+
+```{r fit-model}
+fit <- fit_marked_cjs(ch_list$ch_data,
+                      phi_formula = ~ time,
+                      p_formula   = ~ time,
+                      hessian = TRUE,       # for uncertainty
+                      conf_level  = 0.95)
+
+library(marked)
+?cmr
+
+
+# install.packages("marked")
+library(marked)
+
+# 2) Process data for CJS
+# model="CJS" is the key
+proc <- process.data(ch_list$ch_data, model = "CJS")
+
+# 3) Create design data (this holds Phi and p design matrices + covariates)
+ddl <- make.design.data(proc)
+
+# 4) Fit models
+# Common formulas:
+#   Phi ~ 1          (constant survival)
+#   p   ~ 1          (constant detection)
+#   Phi ~ time       (time-varying survival)
+#   p   ~ time       (time-varying detection)
+
+m0 <- crm(proc, ddl, model.parameters = list(Phi = list(formula = ~1),
+                                            p   = list(formula = ~1)))
+
+mt <- crm(proc, ddl, model.parameters = list(Phi = list(formula = ~time),
+                                            p   = list(formula = ~time)),
+          hessian = TRUE)
+
+mt$results$reals$Phi
+
+
+# 5) Compare models (AICc)
+collect.models()
+
+# look at estimates (round to 3 digits for readability)
+#round(fit$phi, 3)  # survival
+#round(fit$p, 3)    # detection
+
+library(dplyr)
+library(ggplot2)
+
+library(dplyr)
+
+phi <- mt$results$real$Phi %>%
+  mutate(parameter = "Phi")
+
+p <- mt$results$real$p %>%
+  mutate(parameter = "p")
+
+real_est <- bind_rows(phi, p)
+
+
+ggplot(real_est, aes(x = time, y = estimate)) +
+  geom_point(size = 2) +
+  geom_line() +
+  geom_errorbar(
+    aes(ymin = lcl, ymax = ucl),
+    width = 0.1
+  ) +
+  facet_wrap(~ parameter, ncol = 1, scales = "fixed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = "Occasion",
+    y = "Probability",
+    title = "CJS Real-Scale Estimates"
+  ) +
+  theme_bw()
+
+```
+
+```{r plot-phi}
+print(fit$plots$phi)
+```
+
+```{r cum-phi}
+print(fit$plots$cum_phi)
+```
+
+
+```{r plot-fit}
+print(fit$plots$p)
+```

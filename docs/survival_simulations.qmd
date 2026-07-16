@@ -1,0 +1,628 @@
+---
+title: "Simulations to assess juvenile survival modeling"
+author: "Michelle A. Briggs, Ryan N. Kinzer"
+date: July 16, 2026
+format:
+  html:
+    embed-resources: true
+editor: visual
+editor_options: 
+  chunk_output_type: console
+bibliography: references.bib
+link-citations: TRUE
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  echo = FALSE
+)
+
+# load libraries
+#remotes::install_github("ryankinzer/PITmodelR", ref = "dev", build_vignettes = F, force = T)
+
+library(PITmodelR)
+library(tidyverse)
+library(marked)
+library(viridis)
+library(ggpubr)
+library(ggh4x)
+library(knitr)
+
+plot_theme <- readRDS("plot_theme_v2.RDS")
+
+source('./scripts/run_cjs_model_set.R')
+
+```
+
+```{r define-scenarios}
+
+#number of occasions
+n_occ <- 4
+
+#number of fish tagged
+n_init <- matrix(c(2000, 1000, 500), byrow = TRUE, ncol = 1)
+
+#number of additional tags added per occasion
+n_add <- c(0, 0, 0, 0)
+
+#survival
+phi_sim_mat <- matrix(c(0.75, 0.75, 0.5, 
+                 0.5, 0.5, 0.5, 
+                 0.25, 0.25, 0.5), 
+                 byrow = TRUE, ncol = 3)
+
+#detection
+p_sim_mat <- matrix(c(1, 0.5, 0.5, 0.5, 
+                      1, 0.25, 0.25, 0.5,
+                      1, 0.05, 0.5, 0.5, 
+                      1, 0.05, 0.25, 0.5), 
+                    byrow = TRUE, ncol = 4)
+
+#proportion of fish removed by occasion
+#Removal probability appears to be ~2%, so set a constant removal probability
+removals <- c(0, 0.02, 0.02, 0.02)
+
+sites <- paste0("R", 1:n_occ)
+
+#number of iterations per scenario
+n_iter <- 500
+
+scenario_grid <- expand_grid(
+  n_init_sim = 1:nrow(n_init),
+  s_sim = 1:nrow(phi_sim_mat),
+  p_sim = 1:nrow(p_sim_mat)
+  #r_sim = 1:nrow(removals)
+) %>%
+  mutate(N = map(n_init_sim, ~n_init[.x, ]),
+    S = map(s_sim, ~ phi_sim_mat[.x, ]),
+    p = map(p_sim, ~ p_sim_mat[.x, ])
+    #remove = map(r_sim, ~ removals[.x, ])
+    )
+
+n_scenarios <- dim(scenario_grid)[1]
+```
+
+```{r run-sims, eval=FALSE}
+#Do not re-run the simulations
+
+obs_loc <- as.list(sites)
+names(obs_loc) <- sites
+
+results_list <- vector("list", length = n_scenarios * n_iter)
+counter <- 1
+
+for (t in 1:dim(scenario_grid)[1]) {
+  for (i in 1:n_iter) { #500 iterations per scenario
+        
+        #simulate dataset
+        sim_events <- simulate_cjs_events(
+          n_init = scenario_grid$N[[t]],
+          n_add = n_add,
+          sites = sites,
+          S = scenario_grid$S[[t]],
+          p = scenario_grid$p[[t]],
+          #remove_prob = scenario_grid$remove_prob[[t]]
+          remove_prob = c(0, 0.02, 0.02, 0.02)
+          )
+        
+        #format dataset
+        sim_list <- tibble(
+          srr = "sim",
+          release_site = sites[1],
+          release_season = "test",
+          data = list(sim_events),
+          obs_loc = list(obs_loc))
+        
+        #fit three models
+        fit <- run_cjs_model_set(sim_list)
+        
+        #estimates
+        est <- fit$estimates %>%
+          mutate(scenario = t, 
+                 iter = i)
+        
+        results_list[[counter]] <- est
+        counter <- counter + 1
+        
+      }
+    }
+
+sim_output_4occ <- bind_rows(results_list)
+saveRDS(sim_output_4occ, file = "data/juv_survival_sim_output_4occasion_070626.RDS")
+```
+
+```{r output-format, include = FALSE}
+sim_output <- readRDS("juv_survival_sim_output_4occasion_070626.RDS")
+
+head(sim_output)  
+
+scenario_inputs <- scenario_grid %>%
+  mutate(
+    scenario = row_number(),
+    n_value = unlist(N),
+    p_values = sapply(p, function(x) paste(round(x[2:3], 3), collapse = ", ")), 
+    S_values = sapply(S, function(x) paste(round(x[1:2], 3), collapse = ", ")))
+
+#attach true values
+S_sim_values <- scenario_grid %>%
+  rownames_to_column(var = "scenario") %>%
+  mutate(scenario = as.integer(scenario)) %>%
+  select(scenario, s_sim, p_sim, S) %>%
+  unnest_longer(S, values_to = "input_value", indices_to = "interval") %>%
+  mutate(metric = "survival") %>%
+  select(scenario, p_sim, s_sim, interval, metric, input_value)
+
+p_sim_values <- scenario_grid %>%
+  rownames_to_column(var = "scenario") %>%
+  mutate(scenario = as.integer(scenario)) %>%
+  select(scenario, s_sim, p_sim, p) %>%
+  unnest_longer(p, values_to = "input_value", indices_to = "interval") %>%
+  mutate(metric = "detection") %>%
+  select(scenario, p_sim, s_sim, interval, metric, input_value)
+
+#true values by interval
+input_sim_values <- rbind(S_sim_values, p_sim_values)
+
+sim_output <- sim_output %>%
+  full_join(input_sim_values, by = c("scenario", "interval", "metric")) %>%
+  left_join(scenario_inputs %>% select(scenario, n_init_sim), by = "scenario")
+
+sim_output_long <- sim_output %>%
+  select(
+    scenario, iter, metric, interval, from_site, to_site, input_value, p_sim, s_sim, n_init_sim,
+    cjs_est, cjs_lcl, cjs_ucl,
+    mscjs_est, mscjs_lcl, mscjs_ucl,
+    marray_est, marray_lcl, marray_ucl
+  ) %>%
+  pivot_longer(
+    cols = matches("^(cjs|mscjs|marray)_(est|lcl|ucl)$"),
+    names_to = c("model", ".value"),
+    names_pattern = "(cjs|mscjs|marray)_(est|lcl|ucl)"
+  ) %>%
+  filter(!is.na(input_value), !is.na(est))
+
+```
+
+```{r bias-summarize}
+sim_bias <- sim_output_long %>%
+  mutate(bias = est - input_value, 
+         rel_bias = (est-input_value)/input_value, 
+         pct_bias = rel_bias*100, 
+         ci_width = ucl - lcl, 
+         coverage = if_else(lcl <= input_value & ucl >= input_value, 1, 0)) %>%
+  filter(!(metric == "survival" & interval == 3)) %>% #filter out the final survival estimate
+  filter(!(metric == "detection" & interval == 4)) #filter out the final detection estimate
+
+sim_summary <- sim_bias %>%
+  group_by(scenario, metric, model, interval) %>%
+  summarise(true = first(input_value),
+            mean_est = mean(est), 
+            median_est = median(est), 
+            mean_bias = mean(bias), 
+            median_bias = median(bias), 
+            q10 = quantile(bias, 0.10), 
+            q90 = quantile(bias, 0.90),
+            mse = mean((est - input_value)^2), 
+            rmse = sqrt(mse), 
+            med_ci_width = median(ci_width, na.rm = T),
+            ci_width_q025 = quantile(ci_width, 0.025, na.rm = T),
+            ci_width_975 = quantile(ci_width, 0.975, na.rm = T),
+            prop_cov = sum(coverage)/n_iter) %>%
+  full_join(scenario_inputs %>% select(scenario, n_init_sim, s_sim, p_sim), by = "scenario")
+
+```
+
+## Methods
+
+We produced simulated datasets to assess the accuracy and precision of two models used to estimate the survival of juvenile Chinook salmon (*Oncorhynchus tshawytscha*) and steelhead (*O. mykiss*) during downstream migration from natal tributaries to Lower Granite Dam. Simulated mark-recapture datasets included four occasions, representing four opportunities to detect each individual fish. The first occasion represented a marking event, the second occasion represented a detection at an in-stream PIT tag array, the third occasion represented detection at Lower Granite Dam in either the spillway or the juvenile bypass system, and the final occasion represented detection downstream of Lower Granite Dam at hydrosystem facilities or PIT tag arrays in the lower Columbia River.
+
+Datasets were simulated under 36 scenarios representing varying numbers of marked fish, survival probabilities, and detection probabilities. The number of tagged fish was either 2000, 1000, or 500. Simulated survival was constant for the first two intervals and was either 0.75, 0.5, or 0.25. Survival for the final interval, representing the probability of survival downstream of Lower Granite Dam, was 0.50 for all scenarios. Detection probability was 1.0 for the first occasion (representing the marking event) and 0.5 for the final occasion (representing detection downstream of Lower Granite Dam) for all scenarios. Detection probability for the second and third occasions was 0.5 and 0.5; 0.25 and 0.25; 0.05 and 0.5; or 0.05 and 0.25. The probability of removal (i.e., censoring) due to transport or lethal sampling was set to 0.02 for all occasions following the marking event. We simulated datasets for all combinations of the number of marked fish, survival, and detection (Table 1), and we ran 500 iterations of each scenario.
+
+Each simulated dataset was analyzed using two models to estimate survival and detection probabilities. We fit a Cormack-Jolly-Seber (CJS) model [@seber1965; @jolly1965] implemented using the *marked* package in R [@laake2013]. Survival *s* was allowed to vary freely by interval and detection probability *p* was allowed to vary freely by occasion. The CJS model estimates *s* for each interval and *p* for each occasion; however, the final estimates of *s* and *p* (representing survival and detection downstream of Lower Granite Dam) are confounded. We also fit a CJS model using an m-array approach, following the method of [@burnham1987]. The m-array CJS model estimates *s* and *p* varying by interval and occasion, respectively, and $\lambda$, which represents the product of *s* and *p* for the final occasion.
+
+To assess accuracy and precision of survival and detection estimates, we compared the estimates to the true (simulated) values. We assessed the accuracy of estimates by calculating percent bias and root mean squared error. We calculated percent bias as:
+
+$\text{Percent bias} = \frac{\hat{y}_i- y_i}{y_i}*100$,
+
+where $y_i$ is the true (simulated) value and $\hat{y}_i$ is the estimated value. Root mean squared error (RMSE) was calculated for each metric and scenario as:
+
+$\text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i- y_i)^2}$,
+
+where n is the number of iterations, $y_i$ is the true (simulated) value, and $\hat{y}_i$ is the estimated value.
+
+To assess precision, we examined the median width of the 95% confidence intervals among different scenarios as well as the 2.5 and 97.5 percentiles of the confidence interval width.
+
+```{r scenario-table}
+
+scenario_summary_table <- scenario_inputs %>% 
+  select(scenario, n_value, p_values, S_values) %>% 
+  rename(Scenario = scenario, 
+         'Number of marked fish' = n_value, 
+         'Detection probabilities' = p_values, 
+         'Survival probabilities' = S_values)
+
+knitr::kable(scenario_summary_table, caption = "Table 1. Scenarios used to generate simulated datasets. Detection probabilities denote simluated values for the second and third occasions; survival probabilities denote simluated values for the first and second intervals. Detection probabilities for the first and fourth occasions were set to 1.0 and 0.5, respectively, for all scenarios. Survival probability for the final (third) interval was set to 0.5 for all scenarios.")
+
+```
+
+```{r plots-density}
+
+
+
+p_sim_labels <- c("1" = "p = 0.5, 0.5", 
+                  "2" = "p = 0.25, 0.25", 
+                  "3" = "p = 0.05, 0.5", 
+                  "4" = "p = 0.05, 0.25")
+
+s_sim_labels <- c("1" = "s = 0.75", 
+                  "2" = "s = 0.5", 
+                  "3" = "s = 0.25")
+
+n_sim_labels <- c("1" = "N = 2000", 
+                  "2" = "N = 1000", 
+                  "3" = "N = 500")
+
+density_n2000 <- sim_output %>%
+  filter(metric == "survival", 
+         interval %in% c(1, 2)) %>%
+  filter(n_init_sim == 1) %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = marray_est)) + 
+  geom_density(aes(fill = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(p_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  s_sim = s_sim_labels)) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  geom_vline(aes(xintercept = input_value), linewidth = 1.2, linetype = "dashed") + 
+  scale_fill_viridis(discrete = TRUE) +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        panel.spacing = unit(6, "mm")) +
+  xlab("Survival estimate") + 
+  ylab("Density") + 
+  ggtitle("N = 2000")
+
+density_n1000 <- sim_output %>%
+  filter(metric == "survival", 
+         interval %in% c(1, 2)) %>%
+  filter(n_init_sim == 2) %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = marray_est)) + 
+  geom_density(aes(fill = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(p_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  s_sim = s_sim_labels)) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  geom_vline(aes(xintercept = input_value), linewidth = 1.2, linetype = "dashed") + 
+  scale_fill_viridis(discrete = TRUE) +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        panel.spacing = unit(6, "mm")) +
+  xlab("Survival estimate") + 
+  ylab("Density") + 
+  ggtitle("N = 1000")
+
+density_n500 <- sim_output %>%
+  filter(metric == "survival", 
+         interval %in% c(1, 2)) %>%
+  filter(n_init_sim == 3) %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = marray_est)) + 
+  geom_density(aes(fill = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(p_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  s_sim = s_sim_labels)) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  geom_vline(aes(xintercept = input_value), linewidth = 1.2, linetype = "dashed") + 
+  scale_fill_viridis(discrete = TRUE) +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        panel.spacing = unit(6, "mm")) +
+  xlab("Survival estimate") + 
+  ylab("Density") + 
+  ggtitle("N = 500")
+
+```
+
+```{r plots, eval = FALSE}
+
+sim_output %>%
+  filter(metric == "survival",
+         interval == 1) %>%
+  ggplot(aes(x = marray_est, y = cjs_est) ) +
+  geom_point(alpha = 0.1) +
+  facet_wrap(~scenario)
+
+sim_output %>%
+  filter(metric == "detection",
+         interval == 2) %>%
+  ggplot(aes(x = marray_est, y = cjs_est)) +
+  geom_point(alpha = 0.1) +
+  facet_wrap(~scenario)
+
+#MS CJS produces different outputs
+sim_output %>%
+  filter(metric == "survival",
+         interval == 1) %>%
+  ggplot(aes(x = marray_est, y = mscjs_est)) +
+  geom_point() +
+  facet_wrap(~scenario)
+
+sim_output %>%
+  filter(metric == "survival", 
+         interval %in% c(1, 2)) %>%
+  filter(n_init_sim == 1) %>%
+  ggplot(aes(x = mscjs_est)) + 
+  geom_density(aes(fill = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(p_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  s_sim = s_sim_labels)) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1)), limits = c(0, 10)) +
+  geom_vline(aes(xintercept = input_value), linewidth = 1.2, linetype = "dashed") + 
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none") +
+  xlab("Survival estimate") + 
+  ylab("Density") + 
+  ggtitle("Multi-state CJS survival estimates")
+
+sim_output %>%
+  filter(metric == "detection", 
+         interval == 2) %>%
+  filter(n_init_sim == 1) %>%
+  ggplot(aes(x = marray_est)) + 
+  geom_density(aes(fill = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(p_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  s_sim = s_sim_labels)) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  geom_vline(aes(xintercept = input_value), linewidth = 1.2, linetype = "dashed") + 
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none") +
+  xlab("Detection estimate") + 
+  ylab("Density") + 
+  ggtitle("M-array CJS detection estimates")
+
+```
+
+```{r plots-2}
+absolute_bias <- sim_bias %>%
+  filter(metric == "survival", 
+         model == "marray") %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = p_sim, y = bias)) + 
+  geom_violin(aes(fill = p_sim, group = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(n_init_sim), axes = "all", remove_labels = "all",
+              labeller = labeller(s_sim = s_sim_labels, n_init_sim = n_sim_labels)) + 
+  scale_x_discrete(expand = c(0, 0), 
+                     labels = p_sim_labels) + 
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.5, 1)) +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        axis.title.x = element_blank()) +
+  geom_hline(aes(yintercept = 0), linewidth = 1, linetype = "dashed") +
+  scale_fill_viridis(discrete = TRUE) +
+  ylab("Bias")
+
+pct_bias_plot <- sim_bias %>%
+  filter(metric == "survival", 
+         model == "marray") %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = p_sim, y = pct_bias)) + 
+  geom_violin(aes(fill = p_sim, group = p_sim)) + 
+  facet_grid2(vars(s_sim), vars(n_init_sim), axes = "all", remove_labels = "all",
+              labeller = labeller(s_sim = s_sim_labels, n_init_sim = n_sim_labels)) + 
+  scale_x_discrete(expand = c(0, 0), 
+                     labels = p_sim_labels) + 
+  #scale_y_continuous(expand = c(0, 0), limits = c(-0.5, 1)) +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        axis.title.x = element_blank()) +
+  geom_hline(aes(yintercept = 0), linewidth = 1, linetype = "dashed") +
+  scale_fill_viridis(discrete = TRUE) +
+  ylab("Percent bias")
+
+# sim_bias %>%
+#   filter(metric == "detection") %>%
+#   filter(model == "marray") %>%
+#   ggplot(aes(x = scenario, y = bias, group = scenario)) +
+#   geom_violin() +
+#   geom_hline(aes(yintercept = 0)) +
+#   facet_wrap(~model)
+# 
+# sim_bias %>%
+#   filter(metric == "survival") %>%
+#   filter(model == "marray") %>%
+#   ggplot(aes(x = scenario, y = ci_width, group = scenario)) +
+#   geom_violin() +
+#   geom_hline(aes(yintercept = 0)) +
+#   facet_wrap(~model)
+
+#CI width
+
+ci_width_plot <- sim_summary %>%
+  filter(metric == "survival", 
+         model == "marray", 
+         interval == 1) %>%
+  mutate(s_sim = as.character(s_sim)) %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = s_sim, y = med_ci_width, group = p_sim)) + 
+  geom_errorbar(aes(ymin = ci_width_q025, ymax = ci_width_975, color = p_sim), 
+                position = position_dodge(width = 0.5), width = 0.2, linewidth = 1) + 
+  geom_point(aes(fill = p_sim), position = position_dodge(width = 0.5), size = 4, shape = 21) + 
+  facet_wrap2(~n_init_sim, labeller = labeller(n_init_sim = n_sim_labels)) +
+  ylab("Confidence interval width") + 
+  xlab("Survival probability") +
+  scale_x_discrete(expand = c(0, 0), labels = s_sim_labels) +
+  scale_color_viridis(discrete = TRUE, 
+                      labels = p_sim_labels, name = "Detection probability") +
+  scale_fill_viridis(discrete = TRUE, 
+                     labels = p_sim_labels, name = "Detection probability") +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+#RMSE
+
+rmse_plot <- sim_summary %>%
+  filter(metric == "survival", 
+         model == "marray", 
+         interval == 1) %>%
+  mutate(s_sim = as.character(s_sim)) %>%
+  mutate(p_sim = as.character(p_sim)) %>%
+  ggplot(aes(x = s_sim, y = rmse, group = p_sim)) + 
+  #geom_point(aes(fill = p_sim), position = position_dodge(width = 0.5), size = 4, shape = 21) + 
+  geom_bar(stat = "identity", aes(fill = p_sim), position = position_dodge(width = 0.5), 
+           width = 0.5, color = "black") +
+  facet_wrap2(~n_init_sim, labeller = labeller(n_init_sim = n_sim_labels)) +
+  ylab("RMSE") + 
+  xlab("Survival probability") +
+  scale_x_discrete(expand = c(0, 0), labels = s_sim_labels) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 0.6)) + 
+  scale_color_viridis(discrete = TRUE, 
+                      labels = p_sim_labels, name = "Detection probability") +
+  scale_fill_viridis(discrete = TRUE, 
+                     labels = p_sim_labels, name = "Detection probability") +
+  plot_theme + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        panel.spacing = unit(10, "mm"))
+
+```
+
+```{r tables}
+
+
+#survival estimates from M-array model
+marray_survival_sim_table <- sim_summary %>%
+  filter(model == "marray") %>%
+  filter(metric == "survival") %>%
+  filter(interval == 1) %>%
+  ungroup() %>%
+  left_join(scenario_inputs %>% 
+              select(scenario, p_values, n_value), by = "scenario") %>%
+  relocate(c(p_values, n_value), .after = scenario) %>%
+  select(scenario, 
+         p_values, 
+         n_value,
+         true, 
+         mean_est, 
+         median_est,
+         mean_bias, 
+         median_bias, 
+         rmse, 
+         med_ci_width) %>%
+  mutate(across(where(is.numeric) & !any_of("scenario"), ~ round(.x, 3))) %>%
+  rename(Scenario = scenario, 
+         'Detection probability' = p_values, 
+         'Number of tagged fish' = n_value,
+         'Survival probability' = true,
+         'Mean estimate' = mean_est, 
+         'Median estimate' = median_est,
+         'Mean bias' = mean_bias, 
+         'Median bias' = median_bias,
+         RMSE = rmse, 
+         'Median width of 95% CI' = med_ci_width)
+
+#detection estimates from M-array model
+marray_detection_sim_table <- sim_summary %>%
+  filter(model == "marray") %>%
+  filter(metric == "detection") %>%
+  filter(interval == 2) %>%
+  ungroup() %>%
+  left_join(scenario_inputs %>% 
+              select(scenario, S_values, n_value), by = "scenario") %>%
+  relocate(c(S_values, n_value), .after = scenario) %>%
+  select(!c(metric, model, prop_cov)) %>%
+  mutate(across(where(is.numeric) & !any_of("scenario"), ~ round(.x, 3))) %>%
+  kable(format = "markdown")
+
+
+
+```
+
+## Results
+
+The CJS model fit using the *marked* package and the CJS model fit using the m-array approach produced nearly identical estimates for all parameters and all scenarios. Thus, we report results for the m-array model, because this model is of greatest interest for future work. We focus on the accuracy and precision of survival estimates, because survival is the parameter of interest; additionally, estimates of detection probability exhibited similar patterns among scenarios to survival estimates. The accuracy and precision of survival estimates decreased as simulated values of the number of tagged fish, survival probability, and detection probability decreased. When simulated detection probability was 0.5 for both the second and third occasions, estimates were accurate with high precision even when simulated survival was low (*s* = 0.25) and 500 fish were tagged. Accuracy remained high for most scenarios when simulated detection probability was 0.25 for the second and third occasions, with median survival estimates matching the simulated values (Figures 1 - 2) and percent bias centered near zero (Figure 4). However, in scenarios with simulated detection probability was 0.25 and 500 fish were tagged, simulations showed a higher probability of bias in survival estimates (Figures 3 - 4). Precision decreased when simulated detection decreased from 0.5 to 0.25 (Figure 5).
+
+When simulated detection probability was 0.05 on the second occasion, the accuracy and precision of survival estimates declined. Survival estimates were often biased when 500 or 1000 fish were tagged (Figures 2 - 3), with a portion of simulations resulting in underestimates of survival and another portion of simulations estimating survival near 1.0. Bias in survival estimates caused by very low detection probabilities may be reduced by tagging a larger number of fish (e.g., 2000 individuals; Figure 1). High survival also reduced bias in scenarios with low detection probability. Although a larger sample size may increase accuracy when detection probability is very low, confidence intervals were very broad. The median width of 95% confidence intervals around the point estimates of survival were \>0.50 in most scenarios with simulated detection probabilities of 0.05. Such high uncertainty may limit the utility of estimates for informing management decisions.
+
+```{r}
+knitr::kable(marray_survival_sim_table, caption = "Table 2. Estimates of survival probability from the CJS m-array model by scenario. Detection probability, the number of tagged fish, and survival probability indicate simulated values used to generate datasets. Mean and median estimates summarize the estimates of survival by scenario. Mean bias, median bias, and RMSE were calculated by comparing estimated survival to the simulated survival value.")
+```
+
+```{r}
+#| label: fig-density-plot-1
+#| fig-width: 14
+#| fig-height: 10
+#| fig-cap: "Density plots showing estimates of survival from the m-array CJS model for scenarios with 2000 tagged fish. The vertical dashed lines indicate the true (simulated) survival values. Four levels of detection probability are shown in the column  headers, and three levels of survival are indicated by the row labels." 
+density_n2000
+```
+
+```{r}
+#| label: fig-density-plot-2
+#| fig-width: 14
+#| fig-height: 10
+#| fig-cap: "Density plots showing estimates of survival from the m-array CJS model for scenarios with 1000 tagged fish. The vertical dashed lines indicate the true (simulated) survival values. Four levels of detection probability are shown in the column  headers, and three levels of survival are indicated by the row labels." 
+density_n1000
+```
+
+```{r}
+#| label: fig-density-plot-3
+#| fig-width: 14
+#| fig-height: 10
+#| fig-cap: "Density plots showing estimates of survival from the m-array CJS model for scenarios with 500 tagged fish. The vertical dashed lines indicate the true (simulated) survival values. Four levels of detection probability are shown in the column  headers, and three levels of survival are indicated by the row labels." 
+density_n500
+```
+
+```{r}
+#| label: fig-pct-bias-plot
+#| fig-width: 12
+#| fig-height: 8
+#| fig-cap: "The percent bias of survival estimates from the m-array CJS model by scenario. The simulated number of tagged fish is shown in the column headers, and the simulated survival probability is shown in the row labels. The simulated detection probabilities are indicated on the x-axis. The horizontal dashed line indicates a percent bias of zero, indicating accurate survival estimation." 
+pct_bias_plot
+
+```
+
+```{r}
+#| label: fig-rmse-plot
+#| fig-width: 12
+#| fig-height: 6
+#| fig-cap: "Root mean squared error (RMSE) for survival estimates from the m-array CJS model by scenario." 
+rmse_plot
+```
+
+```{r}
+#| label: fig-ci-width-plot
+#| fig-width: 14
+#| fig-height: 6
+#| fig-cap: "The median width of 95% confidence intervals for survival estimates from the m-array CJS model by scenario. The bars indicate the 2.5 and 97.5 percentiles of the confidence interval widths from each scenario." 
+ci_width_plot
+```

@@ -228,8 +228,12 @@ run_cjs_model_set <- function(ch_long_list,
       mscjs_cum <- fit_mscjs$cum_phi
       marray_cum <- fit_marray$cum_phi
       
-      cjs_p <- fit_cjs$p
-      mscjs_p <- fit_mscjs$p
+      cjs_p <- fit_cjs$p 
+      cjs_p$interval <- cjs_p$interval + 1 #TEMPORARY FIX
+      
+      mscjs_p <- fit_mscjs$p 
+      mscjs_p$interval <- mscjs_p$interval + 1 #TEMPORARY FIX
+ 
       marray_p <- fit_marray$p
       
       surv_df <- tibble(

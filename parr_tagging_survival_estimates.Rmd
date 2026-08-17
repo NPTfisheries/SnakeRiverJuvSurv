@@ -1,0 +1,254 @@
+---
+title: "Spring/Summer Chinook parr survival estimates"
+author:
+
+- Michelle A. Briggs:
+    email: michelleb@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+- Ryan N. Kinzer:
+    email: ryank@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::html_document2:
+    theme: cerulean
+    toc: no
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    number_sections: yes
+    #css: "../templates/styles.css"
+    pandoc_args:
+     - "--lua-filter=templates/scholarly-metadata.lua"
+     - "--lua-filter=templates/author-info-blocks.lua"
+     - "--lua-filter=templates/pagebreak.lua"
+  # bookdown::word_document2:
+  #   toc: yes
+  #   toc_depth: 4
+  #   reference_docx: "../templates/Word_template_draft.docx"
+institute:
+- npt_mccall: Nez Perce Tribe, Department of Fisheries Resources Management, 14054 Burr Dr., McCall, Idaho, 83638, USA
+csl: "templates/american-fisheries-society.csl"
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+---
+ 
+
+```{r, include=FALSE}
+library(tidyverse)
+library(kableExtra)
+
+plot_theme <- readRDS("templates/plot_theme_v2.RDS")
+```
+
+
+```{r, include = FALSE}
+ch <- readRDS("data/parr_tagging/ch_parr_2025.RDS")
+estimates <- readRDS("data/parr_tagging/parr_estimates_2025.RDS")
+
+```
+
+
+Survival was estimated for juvenile spring/summer (sp/sum) Chinook salmon tagged in 2025. Juvenile Chinook salmon were tagged in July and August of 2025 at fifteen locations in the Snake River Basin. The number of fish tagged by location varied from 16 to 2,408 (Table 1). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at ten in-stream PIT tag arrays, with each array detecting between 1 and 1,057 tagged juvenile sp/sum Chinook salmon (Table 2). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled. Reach-specific survival (defined as the probability of survival from one detection site to the subsequent downstream detection site) was estimated using the M-array formulation of the Cormack-Jolly-Seber (CJS) model. The CJS model also estimates detection probability for each site. Survival and detection probabilities were estimated independently for each group of tagged fish.   
+
+
+```{r, include = FALSE}
+#tables of number of fish by release site and detection sites
+
+LGR <- c('GRJ', 'GRS') #s = spillway, #j = juvenile bypass
+Down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
+          "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
+obs_sites <- unique(estimates$estimates$from_site)
+release_sites <- unique(ch$release_site)
+
+n_rel_site <- ch %>%
+  group_by(release_site) %>%
+  count() %>%
+  rename('Release site' = release_site, 
+         'Number of tagged fish' = n)
+
+n_detect_site <- ch %>%
+  mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
+                                         if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  group_by(detection_site) %>% 
+  filter(detection_site %in% obs_sites) %>%
+  filter(!(detection_site %in% release_sites)) %>%
+  count() %>%
+  rename('Detection site' = detection_site, 
+         'Number of detected fish' = n)
+```
+
+
+```{r, include = F}
+#tables of survival and detection estimates by release site
+
+survival <- estimates$estimates %>%
+  filter(metric == "survival", to_site != "Down")
+
+detection <- estimates$estimates %>%
+  filter(metric == "detection") %>%
+  filter(!(is.na(marray_est)))
+
+cumulative <- estimates$estimates %>%
+  filter(metric == "cumulative") %>%
+  filter(!is.na(marray_est))
+
+survival_tbl <- survival %>%
+  select(release_site, interval, from_site, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'From site' = from_site, 
+         'To site' = to_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI
+         )
+
+grp_sur <- rle(as.character(survival_tbl$'Release site'))
+index_sur <- setNames(grp_sur$lengths, grp_sur$values)
+
+survival_tbl <- survival_tbl %>% select(-'Release site')
+
+detection_tbl <- detection %>%
+  select(release_site, interval, from_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'Site' = from_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI
+         )
+
+grp_det <- rle(as.character(detection_tbl$'Release site'))
+index_det <- setNames(grp_det$lengths, grp_det$values)
+
+detection_tbl <- detection_tbl %>% select(-'Release site')
+
+cumulative_tbl <- cumulative %>%
+  select(release_site, interval, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'To site' = to_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI
+         )
+
+grp_cumulative <- rle(as.character(cumulative_tbl$'Release site'))
+index_cumulative <- setNames(grp_cumulative$lengths, grp_cumulative$values)
+
+cumulative_tbl <- cumulative_tbl %>% select(-'Release site')
+
+```
+
+
+
+```{r tab-1, echo = F, tab.cap = "The number of juvenile sp/sum Chinook salmon tagged by release site in 2025."}
+knitr::kable(n_rel_site) #%>%
+  #kable_styling(full_width = TRUE)
+```
+
+```{r tab-2, echo = F}
+knitr::kable(n_detect_site, 
+             caption = "The number of juvenile sp/sum Chinook salmon detected at instream detection sites during downstream migration. Detections at Down represent detections at all sites downstream of Lower Granite Dam combined.") #%>%
+ # kable_styling(full_width = TRUE)
+```
+
+```{r tab-3, echo = F}
+kableExtra::kbl(survival_tbl, 
+                align = "c",
+      caption = "Reach-specific estimates of survival for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam.") %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(index = index_sur)
+```
+
+```{r tab-4, echo = F}
+kableExtra::kbl(detection_tbl, 
+      align = "c", 
+      caption = "Estimates of detection probability for juvenile sp/sum Chinook salmon at instream detection sites during downstream migration to Lower Granite Dam. Detection probability was estimated independently for each release group.") %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(index = index_det) 
+```
+
+
+```{r tab-5, echo = F}
+kableExtra::kbl(cumulative_tbl, 
+      align = "c", 
+      caption = "Estimates of cumulative survival probability for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam.") %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(index = index_cumulative) 
+```
+
+```{r, include = F}
+#survival figures
+
+surv_plot <- survival %>%
+    #filter(release_site %in% site_subset) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    ggplot(aes(x = int_label, y = marray_est)) + 
+    geom_point(size = 3) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl), width = 0.1) +
+    plot_theme + 
+    facet_wrap(~release_site, scales = "free_x", ncol = 3) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Survival") + 
+    xlab(" ")
+
+#detection figures
+detection_plot <- detection %>%
+    mutate(site = fct_reorder(from_site, interval)) %>%
+    ggplot(aes(x = site, y = marray_est)) + 
+    geom_point(size = 3) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl), width = 0.1) +
+    plot_theme + 
+    facet_wrap(~release_site, scales = "free_x", ncol = 3) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Detection probability") + 
+    xlab("Site")
+
+cumulative_plot <- cumulative %>%
+    mutate(site = fct_reorder(to_site, interval)) %>%
+    ggplot(aes(x = site, y = marray_est)) + 
+    geom_point(size = 3) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl), width = 0.1) +
+    plot_theme + 
+    facet_wrap(~release_site, scales = "free_x", ncol = 3) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Cumulative survival") + 
+    xlab("To site")
+
+```
+
+```{r surv-plot, echo = F, fig.width=10, fig.height=20, fig.cap="Survival estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam by reach. Estimates were produced using the M-array formulation of the CJS model; error bars indicate 95% confidence intervals."}
+surv_plot
+```
+
+
+```{r det-plot, echo=F, fig.width=10, fig.height=18, fig.cap="Detection probability estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam by reach. Estimates were produced using the M-array formulation of the CJS model; error bars indicate 95% confidence intervals."}
+detection_plot
+```
+
+```{r cumulative-plot, echo=F, fig.width=10, fig.height=18, fig.cap="Estimates of cumulative survival for juvenile sp/sum Chinook salmon to Lower Granite Dam by reach. Estimates were produced using the M-array formulation of the CJS model; error bars indicate 95% confidence intervals."}
+cumulative_plot
+```
+

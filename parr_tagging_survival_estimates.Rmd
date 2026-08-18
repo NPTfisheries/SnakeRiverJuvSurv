@@ -53,7 +53,7 @@ estimates <- readRDS("data/parr_tagging/parr_estimates_2025.RDS")
 ```
 
 
-Survival was estimated for juvenile spring/summer (sp/sum) Chinook salmon tagged in 2025. Juvenile Chinook salmon were tagged in July and August of 2025 at fifteen locations in the Snake River Basin. The number of fish tagged by location varied from 16 to 2,408 (Table 1). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at ten in-stream PIT tag arrays, with each array detecting between 1 and 1,057 tagged juvenile sp/sum Chinook salmon (Table 2). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled. Reach-specific survival (defined as the probability of survival from one detection site to the subsequent downstream detection site) was estimated using the M-array formulation of the Cormack-Jolly-Seber (CJS) model. The CJS model also estimates detection probability for each site. Survival and detection probabilities were estimated independently for each group of tagged fish.   
+Survival was estimated for juvenile spring/summer (sp/sum) Chinook salmon tagged in 2025. Juvenile Chinook salmon were tagged in July and August of 2025 at fifteen locations in the Snake River Basin. The number of fish tagged by location varied from 15 to 1,499 (Table 1). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at ten in-stream PIT tag arrays, with each array detecting between 1 and 1,055 tagged juvenile sp/sum Chinook salmon (Table 2). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled. Reach-specific survival (defined as the probability of survival from one detection site to the subsequent downstream detection site) was estimated using the M-array formulation of the Cormack-Jolly-Seber (CJS) model. The CJS model also estimates detection probability for each site. Survival and detection probabilities were estimated independently for each group of tagged fish.   
 
 
 ```{r, include = FALSE}
@@ -66,6 +66,8 @@ obs_sites <- unique(estimates$estimates$from_site)
 release_sites <- unique(ch$release_site)
 
 n_rel_site <- ch %>%
+  select(tag_code, release_site) %>%
+  distinct() %>%
   group_by(release_site) %>%
   count() %>%
   rename('Release site' = release_site, 
@@ -74,6 +76,8 @@ n_rel_site <- ch %>%
 n_detect_site <- ch %>%
   mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
                                          if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  select(tag_code, detection_site) %>%
+  distinct() %>%
   group_by(detection_site) %>% 
   filter(detection_site %in% obs_sites) %>%
   filter(!(detection_site %in% release_sites)) %>%

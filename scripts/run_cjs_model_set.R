@@ -320,12 +320,11 @@ run_cjs_model_set <- function(ch_long_list,
 
 
 run_cjs_model_set_multiple <- function(ch_long_list,
-                              min_detected_occasions = 3) {
+                                       min_detected_occasions = 3) {
   
   safe_build <- safely(build_capture_histories)
   safe_cjs <- safely(fit_marked_cjs_multiple)
   safe_mscjs <- safely(fit_marked_mscjs_multiple)
-  #safe_marray <- safely(fit_marray_cjs)
   
   count_detected_occasions <- function(ch_data) {
     if (is.null(ch_data) || !"ch" %in% names(ch_data) || !nrow(ch_data)) return(0L)
@@ -354,6 +353,12 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         )
       )
     )
+  
+  marray_list <- ch_list %>%
+    mutate(m_array = map(
+      ch, ~(marray = .x$m_array))) %>%
+    select(srr, release_site, m_array) %>%
+    rename(release_group = release_site)
   
   site_mapping <- ch_list %>%
     mutate(site_map = map(ch, "mapping")) %>%
@@ -416,16 +421,11 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         x$ch <- gsub("2", "1", x$ch)
         x
       }),
-
-       ms_data = map2(ch_data, run_models, ~ {
-         if (!.y) return(NULL)
-         build_multistate_histories(.x)
-       }),
-      # 
-      # m_array = map2(ch_list, run_models, ~ {
-      #   if (!.y) return(NULL)
-      #   .x$m_array
-      # }),
+      
+      ms_data = map2(ch_data, run_models, ~ {
+        if (!.y) return(NULL)
+        build_multistate_histories(.x)
+      }),
       
       fit_cjs_safe = map2(
         cjs_data,
@@ -434,23 +434,17 @@ run_cjs_model_set_multiple <- function(ch_long_list,
                            site_mapping = site_mapping) else list(result = NULL, error = NULL)
       ),
       
-       fit_mscjs_safe = map2(
-         ms_data,
-         run_models,
-         ~ if (.y) safe_mscjs(
-           .x,
-           site_mapping = site_mapping,
-           s_formula = ~time*release_group,
-           p_formula = ~stratum*time*detect_site,
-           psi_formula = ~ -1 + stratum:tostratum
-         ) else list(result = NULL, error = NULL)
-       ),
-      # 
-      # fit_marray_safe = map2(
-      #   m_array,
-      #   run_models,
-      #   ~ if (.y) safe_marray(.x) else list(result = NULL, error = NULL)
-      # ),
+      fit_mscjs_safe = map2(
+        ms_data,
+        run_models,
+        ~ if (.y) safe_mscjs(
+          .x,
+          site_mapping = site_mapping,
+          s_formula = ~time*release_group,
+          p_formula = ~stratum*time*detect_site,
+          psi_formula = ~ -1 + stratum:tostratum
+        ) else list(result = NULL, error = NULL)
+      ),
       
       fit_cjs = map(fit_cjs_safe, "result"),
       fit_mscjs = map(fit_mscjs_safe, "result"),
@@ -458,8 +452,9 @@ run_cjs_model_set_multiple <- function(ch_long_list,
       
       error_cjs = map_chr(fit_cjs_safe, extract_error),
       error_mscjs = map_chr(fit_mscjs_safe, extract_error),
-      # error_marray = map_chr(fit_marray_safe, extract_error)
     )
+  
+  fit_marray <- fit_marray_cjs_multiple(marray_list)
   
   estimate_df <- model_tbl %>%
     select(
@@ -483,8 +478,8 @@ run_cjs_model_set_multiple <- function(ch_long_list,
                       fit_cjs,
                       fit_mscjs
                       #fit_marray
-                      ) {
-
+    ) {
+      
       #loc_names <- names(obs_loc)
       #n_sites <- length(obs_loc)
       n_reaches <- n_detected_occasions - 1
@@ -493,7 +488,7 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         filter(occ > 1) %>%
         select(detect_site) %>%
         distinct()
-
+      
       group_cols <- tibble(
         srr = srr,
         #release_site = release_site,
@@ -502,10 +497,10 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         error_build = error_build,
         error_precheck = error_precheck,
         error_cjs = error_cjs,
-        #error_mscjs = error_mscjs,
+        error_mscjs = error_mscjs,
         #error_marray = error_marray
       )
-
+      
       if (!is.na(error_build) || !is.na(error_precheck)) {
         return(group_cols %>%
                  mutate(
@@ -516,31 +511,40 @@ run_cjs_model_set_multiple <- function(ch_long_list,
                    cjs_est = NA_real_,
                    cjs_lcl = NA_real_,
                    cjs_ucl = NA_real_,
-                    mscjs_est = NA_real_,
-                    mscjs_lcl = NA_real_,
-                    mscjs_ucl = NA_real_
+                   mscjs_est = NA_real_,
+                   mscjs_lcl = NA_real_,
+                   mscjs_ucl = NA_real_
                    # marray_est = NA_real_,
                    # marray_lcl = NA_real_,
                    # marray_ucl = NA_real_
                  ))
       }
-
+      
       cjs_phi <- fit_cjs$phi
       mscjs_phi <- fit_mscjs$phi
-      #marray_phi <- fit_marray$phi
-
+      marray_phi <- fit_marray$phi %>%
+        mutate(metric = "survival") %>%
+        rename(marray_est = phi, 
+               marray_lcl = lcl, 
+               marray_ucl = ucl)
+      
       cjs_cum <- fit_cjs$cum_phi
       mscjs_cum <- fit_mscjs$cum_phi
       #marray_cum <- fit_marray$cum_phi
-
+      
       cjs_p <- fit_cjs$p
       #cjs_p$interval <- cjs_p$interval
-
-      mscjs_p <- fit_mscjs$p
+      
+      mscjs_p <- fit_mscjs$p 
       #mscjs_p$interval <- mscjs_p$interval + 1 #TEMPORARY FIX
-
-      #marray_p <- fit_marray$p
-
+      
+      marray_p <- fit_marray$p %>%
+        mutate(metric = "detection") %>%
+        rename(marray_est = p, 
+               marray_lcl = lcl, 
+               marray_ucl = ucl, 
+               to_site = site)
+      
       surv_df <- cjs_phi %>%
         mutate(metric = "survival") %>%
         left_join(site_mapping %>% mutate(interval = as.factor(occ))) %>%
@@ -556,10 +560,11 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         rename(mscjs_est = estimate,
                mscjs_lcl = lcl,
                mscjs_ucl = ucl) %>%
-        select(-se)
-
-        #left_join(make_est_df(marray_phi, "marray"), by = "interval")
-
+        select(-se) %>%
+        left_join(marray_phi, by = c("release_group", "to_site", "from_site", "metric"))
+      
+      #left_join(make_est_df(marray_phi, "marray"), by = "interval")
+      
       cum_df <- cjs_cum %>%
         mutate(metric = "cumulative",
                occ = as.numeric(interval) + 1) %>%
@@ -568,15 +573,15 @@ run_cjs_model_set_multiple <- function(ch_long_list,
         mutate(from_site = release_group) %>%
         select(-occ) %>%
         rename(cjs_est = estimate,
-                            cjs_lcl = lcl,
-                            cjs_ucl = ucl) %>%
+               cjs_lcl = lcl,
+               cjs_ucl = ucl) %>%
         left_join(mscjs_phi, by = c("interval", "release_group"), copy = T) %>%
         rename(mscjs_est = estimate,
                mscjs_lcl = lcl,
                mscjs_ucl = ucl)
-
-        #left_join(make_est_df(marray_cum, "marray"), by = "interval")
-
+      
+      #left_join(make_est_df(marray_cum, "marray"), by = "interval")
+      
       p_df <- cjs_p %>%
         mutate(metric = "detection") %>%
         rename(cjs_est = estimate,
@@ -588,13 +593,14 @@ run_cjs_model_set_multiple <- function(ch_long_list,
                mscjs_lcl = lcl,
                mscjs_ucl = ucl,
                from_site = detect_site) %>%
-        mutate(to_site = from_site)
-
-        #left_join(make_est_df(marray_p, "marray"), by = "interval")
-
+        mutate(to_site = from_site) %>%
+        left_join(marray_p, by = c("to_site", "metric"))
+      
+      #left_join(make_est_df(marray_p, "marray"), by = "interval")
+      
       bind_rows(surv_df, cum_df, p_df) %>%
         bind_cols(group_cols[rep(1, nrow(.)), ]) #%>%
-        #relocate(srr, release_site, release_season, n_detected_occasions)
+      #relocate(srr, release_site, release_season, n_detected_occasions)
     })
   
   list(

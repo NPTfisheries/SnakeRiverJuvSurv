@@ -337,3 +337,38 @@ parr_estimates_long %>%
   scale_color_brewer(palette = "Dark2") + 
   ylab("Survival") + 
   xlab("Interval")
+
+
+#### 2026 tagging 
+
+activity <- 'parr' # used for directory path and hatchery, rst
+tag_yr = 2026
+
+
+# check for mark groups and if interrogation files exist (requires two specific file names "....Mark.rds" and "....INT.rds")
+
+#CTH files are manually downloaded from PTAGIS
+
+file_df <- check_mark_groups_tag_yr(activity = activity, tag_year = 2026)
+
+mark_groups <- file_df %>% filter(cth_exists)
+
+no_cth <- file_df %>% filter(!cth_exists)
+
+# Need to map across all the groups contained in mark_groups
+
+mark_df <- map_df(no_cth$mark_file,
+                  ~readRDS(file.path(file_path, .))
+)
+
+mark_2026 <- mark_df %>%
+  filter(species_run_rear_type %in% c("11W", "12W"), #sp/sum chinook
+         #release_site %in% mark_site, #look at what we're filtering here
+         !grepl('Y', text_comments), 
+         !grepl('Y|M', conditional_comments)) #I think this is removing yearlings and mortalities
+
+table(mark_2026$event_type)
+table(mark_2026$capture_method)
+table(mark_2026$event_season)
+table(mark_2026$species_run_rear_type)
+table(mark_2026$release_site)

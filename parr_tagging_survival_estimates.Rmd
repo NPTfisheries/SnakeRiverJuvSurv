@@ -41,67 +41,93 @@ bibliography: references.bib
 ```{r, include=FALSE}
 library(tidyverse)
 library(kableExtra)
+library(tidytext)
 
 plot_theme <- readRDS("templates/plot_theme_v2.RDS")
 ```
 
 ```{r, include = FALSE}
 ch <- readRDS("data/parr_tagging/ch_parr_2025.RDS")
-estimates <- readRDS("data/parr_tagging/parr_estimates_2025.RDS")
+model_output <- readRDS("data/parr_tagging/parr_estimates_2025.RDS")
 obs_tbl <- readRDS("data/parr_tagging_obs_tbl.RDS")
 
 ```
 
 ### Methods
 
-Survival was estimated for juvenile spring/summer (sp/sum) Chinook salmon tagged in 2025. Chinook salmon parr were tagged with PIT tags in July and August of 2025 at fifteen locations in the Snake River Basin. The number of fish tagged by location varied from 15 to 1,499 ( Table \@ref(tab:tab-1)). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at ten in-stream PIT tag arrays, with each array detecting between 1 and 1,055 tagged juvenile sp/sum Chinook salmon (Table \@ref(tab:tab-2)). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled. Detections occurred from July 2025 to August 2026 (Figure \@ref(fig:emigration-plot)).
+Survival was estimated for juvenile spring/summer (sp/sum) Chinook salmon tagged in 2025. Chinook salmon parr were tagged with PIT tags in summer and fall of 2025 at nineteen locations in the Snake River Basin. Summer tagging occurred before 1 September 2025; fall tagging occurred on or after 1 September. The number of fish tagged by location and season varied from 14 to 1,499 ( Table \@ref(tab:tab-1)). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at fourteen in-stream PIT tag arrays. Detections at the LC1 and LC2 arrays and at the SC1 and SC2 arrays were pooled due to close spatial proximity and are represented by detection sites LC12 and SC12, respectively. Each array detected between 3 and 1,055 tagged juvenile sp/sum Chinook salmon (Table \@ref(tab:tab-2)). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled (detection site "Down"). Detections occurred from July 2025 to August 2026 (Figure \@ref(fig:emigration-plot)).
 
-Reach-specific survival (defined as the probability of survival from one detection site to the subsequent downstream detection site) was estimated using the M-array formulation of the Cormack-Jolly-Seber (CJS) model [@burnham1987]. The M-array formulation of the CJS model estimates survival for each reach from the release site to Lower Granite Dam and detection probability for each in-stream array and for Lower Granite Dam. For the final reach (i.e., downstream of Lower Granite Dam) a single parameter $\lambda$ , representing the product of final survival and detection, is estimated, because survival and detection cannot be estimated independently. Survival was not estimated for fish tagged in Bear Creek (BEAR6C) due to low sample size.
+Reach-specific survival (defined as the probability of survival from one detection site to the subsequent downstream detection site) was estimated using the M-array formulation of the Cormack-Jolly-Seber (CJS) model [@burnham1987]. The M-array formulation of the CJS model estimates survival for each reach from the release site to Lower Granite Dam and detection probability for each in-stream array and for Lower Granite Dam. For the final reach (i.e., downstream of Lower Granite Dam) a single parameter $\lambda$ , representing the product of final survival and detection, is estimated, because survival and detection cannot be estimated independently. Fish tagged in the summer and fall at the same site were treated as separate release groups. Survival was not estimated for fish tagged in Bear Creek (BEAR6C) or summer-tagged fish in the American River (AMERR) due to low sample sizes. Survival was not estimated for fall-tagged fish in Lolo Creek (LOLOC) due to insufficient detections during downstream migration.
 
 ```{r, include = FALSE}
 #tables of number of fish by release site and detection sites
 
+estimates <- model_output$estimates
+model_tbl <- model_output$model_tbl
+
+estimates <- estimates %>%
+  mutate(from_site = str_extract(from_site, "^[^_]*")) %>%
+  separate_wider_delim(cols = release_site, 
+                       delim = "_", 
+                       names = c("release_site", "mark_season"))
+
 LGR <- c('GRJ', 'GRS') #s = spillway, #j = juvenile bypass
 Down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
           "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
-obs_sites <- unique(estimates$estimates$from_site)
+LC12 <- c('LC1', 'LC2')
+SC12 <- c('SC1', 'SC2')
+
+obs_sites <- unique(estimates$from_site)
 release_sites <- unique(ch$release_site)
 
-site_names <- c("Bear Creek", "Hurricane Creek", 
-                "Wallowa River", "Capehorn Creek", 
-                "Chamberlin Creek", "Marsh Creek", 
-                "Burnt Log Creek", "Grouse Creek", 
-                "Johnson Creek", "Lake Creek", 
-                "East Fork South Fork Salmon River", 
-                "South Fork Salmon River", "Secesh River", 
-                "Summit Creek", "Lolo Creek")
+site_names <- c("Newsome Creek", "Lolo Creek", 
+                "Red River", "American River", 
+                "Hurricane Creek", "Wallowa River", 
+                "Bear Creek", "Summit Creek", 
+                "Grouse Creek", "Johnson Creek", 
+                "Burnt Log Creek", "East Fork South Fork Salmon River", 
+                "Secesh River", "Lake Creek", 
+                "Capehorn Creek", "Crooked River", 
+                "Chamberlin Creek", "Marsh Creek", "South Fork Salmon River")
+
+site_names <- as.data.frame(cbind(release_sites, site_names))
+site_names <- site_names %>%
+  rename(release_site = release_sites)
 
 #group release sites by area
 gri <- c("BEAR6C", "HURRIC", "WALLOR") 
 sf_sal <- c("BURNLC", "GROUSC", "JOHNSC", "LAKEC", "SAEFSF", "SALRSF", "SECESR", "SUMITC")
 mf_sal <- c("CHAMBC", "MARSHC", "CAPEHC")
-clear <- c("LOLOC")
+wet_clear <- c("LOLOC") 
+dry_clear <- c("NEWSOC", "REDR", "AMERR", "CROOKR")
 
 n_rel_site <- ch %>%
-  select(tag_code, release_site) %>%
+  select(tag_code, release_site, mark_season) %>%
   distinct() %>%
-  group_by(release_site) %>%
+  group_by(release_site, mark_season) %>%
   count() %>%
+  left_join(site_names, by = "release_site") %>%
   mutate(mpg = case_when(
     `release_site` %in% gri  ~ "Grande Ronde/Imnaha",
     `release_site` %in% sf_sal   ~ "SF Salmon",
     `release_site` %in% mf_sal ~ "MF Salmon",
-    `release_site` %in% clear    ~ "Wet Clearwater")) %>%
+    `release_site` %in% wet_clear    ~ "Wet Clearwater", 
+    `release_site` %in% dry_clear ~ "Dry Clearwater")) %>%
   rename('Release site' = release_site, 
-         'Number of tagged fish' = n) %>%
-  arrange(mpg) 
+         'Tag season' = mark_season,
+         'Number of tagged fish' = n, 
+         'Site name' = site_names) %>%
+  arrange(mpg) %>%
+  relocate('Site name', .after = 'Release site')
 
-n_rel_site <- cbind(n_rel_site, site_names)
-n_rel_site <- n_rel_site %>%
-  rename('Site name' = ...4)
+#n_rel_site <- cbind(n_rel_site, site_names)
+#n_rel_site <- n_rel_site %>%
+#  rename('Site name' = ...4)
 
 site_by_mpg <- n_rel_site %>%
-  select('Release site', mpg)
+  ungroup() %>%
+  select('Release site', mpg) %>%
+  distinct()
 
 grp_site <- rle(as.character(n_rel_site$mpg))
 index_site <- setNames(grp_site$lengths, grp_site$values)
@@ -122,6 +148,8 @@ detect_site_key <- obs_tbl %>%
 n_detect_site <- ch %>%
   mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
                                          if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  mutate(detection_site = if_else(detection_site %in% LC12, "LC12", 
+                                  if_else(detection_site %in% SC12, "SC12", detection_site))) %>%
   select(tag_code, detection_site) %>%
   distinct() %>%
   group_by(detection_site) %>% 
@@ -139,19 +167,19 @@ n_detect_site <- ch %>%
 ```{r, include = F}
 #tables of survival and detection estimates by release site
 
-survival <- estimates$estimates %>%
+survival <- estimates %>%
   filter(metric == "survival", to_site != "Down")
 
-detection <- estimates$estimates %>%
+detection <- estimates %>%
   filter(metric == "detection") %>%
   filter(!(is.na(marray_est)))
 
-cumulative <- estimates$estimates %>%
+cumulative <- estimates %>%
   filter(metric == "cumulative") %>%
   filter(!is.na(marray_est))
 
 survival_tbl <- survival %>%
-  select(release_site, interval, from_site, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  select(release_site, mark_season, interval, from_site, to_site, marray_est, marray_lcl, marray_ucl) %>%
   mutate(marray_est = round(marray_est, 3),
          marray_lcl = round(marray_lcl, 3), 
          marray_ucl = round(marray_ucl, 3)) %>%
@@ -161,7 +189,8 @@ survival_tbl <- survival %>%
          'From site' = from_site, 
          'To site' = to_site, 
          Estimate = marray_est, 
-         '95% CI' = CI
+         '95% CI' = CI, 
+         'Tag season' = mark_season
          ) %>%
   left_join(site_by_mpg, by = "Release site") %>%
   arrange(mpg)
@@ -175,7 +204,7 @@ index_mpg <- setNames(mpg_rle$lengths, mpg_rle$values)
 survival_tbl <- survival_tbl %>% select(-'Release site')
 
 detection_tbl <- detection %>%
-  select(release_site, interval, from_site, marray_est, marray_lcl, marray_ucl) %>%
+  select(release_site, mark_season, interval, from_site, marray_est, marray_lcl, marray_ucl) %>%
   mutate(marray_est = round(marray_est, 3),
          marray_lcl = round(marray_lcl, 3), 
          marray_ucl = round(marray_ucl, 3)) %>%
@@ -184,7 +213,8 @@ detection_tbl <- detection %>%
          Interval = interval, 
          'Site' = from_site, 
          Estimate = marray_est, 
-         '95% CI' = CI
+         '95% CI' = CI, 
+         'Tag season' = mark_season
          ) %>%
   left_join(site_by_mpg, by = "Release site") %>%
   arrange(mpg)
@@ -195,7 +225,7 @@ index_det <- setNames(grp_det$lengths, grp_det$values)
 detection_tbl <- detection_tbl %>% select(-'Release site')
 
 cumulative_tbl <- cumulative %>%
-  select(release_site, interval, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  select(release_site, mark_season, interval, to_site, marray_est, marray_lcl, marray_ucl) %>%
   mutate(marray_est = round(marray_est, 3),
          marray_lcl = round(marray_lcl, 3), 
          marray_ucl = round(marray_ucl, 3)) %>%
@@ -204,7 +234,8 @@ cumulative_tbl <- cumulative %>%
          Interval = interval, 
          'To site' = to_site, 
          Estimate = marray_est, 
-         '95% CI' = CI
+         '95% CI' = CI, 
+         'Tag season' = mark_season
          ) %>%
   left_join(site_by_mpg, by = "Release site") %>%
   arrange(mpg)
@@ -223,23 +254,25 @@ detection_timing <- ch %>%
   filter(event_type != "Mark") %>% #filter out marking events
   mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
                                          if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  mutate(detection_site = if_else(detection_site %in% LC12, "LC12", 
+                                  if_else(detection_site %in% SC12, "SC12", detection_site))) %>%
   filter(detection_site %in% obs_sites) %>%
   filter(!(detection_site %in% release_sites)) %>%
-  select(tag_code, detection_site, first_obs, release_site, mark_release_date) %>%
+  select(tag_code, detection_site, first_obs, release_site, mark_season, mark_release_date) %>%
   arrange(first_obs)
 
 detection_timing <- detection_timing %>%
   mutate(fish_num = 1) %>%
-  group_by(release_site, detection_site) %>%
+  group_by(release_site, detection_site, mark_season) %>%
   mutate(cumul = cumsum(fish_num), 
          cum_prop = cumsum(fish_num)/sum(fish_num))
 
 emigration_timing_plot <- detection_timing %>%
   filter(release_site != "BEAR6C") %>%
-  filter(!(detection_site %in% c("CWR", "Down"))) %>%
+  filter(!(detection_site %in% c("CWR", "Down", "SC2"))) %>%
   filter(!(detection_site == "ZEN" & release_site == "JOHNSC")) %>% #filter out 1 JC fish that was detected at ZEN
   ggplot(aes(x = first_obs, y = cum_prop)) + 
-  geom_line(aes(color = release_site), linewidth = 1) +
+  geom_line(aes(color = release_site, linetype = mark_season), linewidth = 1) +
   #scale_color_viridis_d(option = "viridis", name = "Release site") +
   facet_wrap(~detection_site, ncol = 3) + 
   plot_theme + 
@@ -249,7 +282,8 @@ emigration_timing_plot <- detection_timing %>%
   xlab("Date") + 
   scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) + 
   scale_x_date(expand = c(0, 0)) + 
-  labs(color = "Release site")
+  labs(color = "Release site") + 
+  scale_linetype_manual(values = c("dashed", "solid"), name = "Tag season")
 
 ```
 
@@ -258,7 +292,7 @@ emigration_timing_plot <- detection_timing %>%
   #kable_styling(full_width = TRUE)
 
 kableExtra::kbl(n_rel_site_tbl, 
-                caption = "The number of juvenile sp/sum Chinook salmon tagged by release site in 2025. Release sites are grouped by major population group (MPG)." ) %>%
+                caption = "The number of juvenile sp/sum Chinook salmon tagged by release site and season in 2025. Release sites are grouped by major population group (MPG)." ) %>%
   #select(-area) %>%
   kable_styling(full_width = TRUE) %>%
   pack_rows(index = index_site)
@@ -266,21 +300,21 @@ kableExtra::kbl(n_rel_site_tbl,
 
 ```{r tab-2, echo = F, warning = F}
 knitr::kable(n_detect_site, 
-             caption = "The number of juvenile sp/sum Chinook salmon detected at instream detection sites during downstream migration. Detections at Down represent detections at all sites downstream of Lower Granite Dam combined. Fish tagged and released at the associated release sites will pass the indicated detection site during downstream migration.") #%>%
+             caption = "The number of juvenile sp/sum Chinook salmon detected at instream detection sites during downstream migration. Detections at Down represent detections at all sites downstream of Lower Granite Dam combined. Detections at LC12 represent detections at sites LC1 and LC2 combined, and detections at SC12 represent detections at sites SC1 and SC2 combined. Fish tagged and released at the associated release sites will pass the indicated detection site during downstream migration.") #%>%
  # kable_styling(full_width = TRUE)
 ```
 
-```{r emigration-plot, echo = F, fig.width=12, fig.height=14, fig.cap="Cumulative emigration timing of juvenile sp/sum Chinook salmon during downstream migration at each in-stream array and at Lower Granite Dam. Each color represents a unique tag group. Emigration timing is not shown for CWR, because only one fish was detected."}
+```{r emigration-plot, echo = F, fig.width=12, fig.height=14, fig.cap="Cumulative emigration timing of juvenile sp/sum Chinook salmon during downstream migration at each in-stream array and at Lower Granite Dam. Each color represents a unique tag group. Solid lines indicate summer-tagged fish, and dashed lines indicate fall-tagged fish."}
 emigration_timing_plot
 ```
 
 ### Results and discussion
 
-Reach-specific estimates of survival for sp/sum Chinook parr were variable, and many estimates had broad confidence intervals (i.e., 95% CI 0 - 1, Figure \@ref(fig:surv-plot), Table \@ref(tab:tab-3)). Estimates of detection probability varied by detection site and by release group, with a minimum estimated detection probability of 0.002 for WR1 for the Hurricane Creek release group and a maximum detection probability of 0.935 for MAR for the Marsh Creek release group. Estimates of cumulative survival to Lower Granite Dam varied from 0.036 (95% CI 0.016 - 0.978) at Grouse Creek to 0.36 (95% CI 0.10 - 1.0) at Marsh Creek (Figure \@ref(fig:cumulative-plot), Table \@ref(tab:tab-5)). The average cumulative survival to Lower Granite Dam was 0.19, which is similar to estimates reported in previous research [@lamb2026].
+Reach-specific estimates of survival for sp/sum Chinook parr were variable, and many estimates had broad confidence intervals (i.e., 95% CI 0 - 1, Figure \@ref(fig:surv-plot), Table \@ref(tab:tab-3)). When fish were tagged in the summer and fall at a single site, estimates of survival were typically similar for fish tagged in both seasons (e.g., NEWSOC, REDR, LOLOC). Estimates of detection probability varied by detection site and by release group, with minimum estimates of detection probability equal to 0 and maximum estimates of 1 (Figure \@ref(fig:det-plot), Table \@ref(tab:tab-4)). Estimates of cumulative survival to Lower Granite Dam varied from 0.006 (95% CI 0 - 1.0) for summer-tagged fish at Newsome Creek to 0.39 (95% CI 0.067 - 1.0) at Chamberlin Creek (Figure \@ref(fig:cumulative-plot), Table \@ref(tab:tab-5)). The average cumulative survival to Lower Granite Dam was 0.169, which is similar to estimates reported in previous research [@lamb2026].
 
-Release groups with low sample sizes tended to have lower precision of reach-specific survival estimates. For example, Burnt Log Creek, Grouse Creek, and Summit Creek had sample sizes of 52, 168, and 174 tagged fish, respectively; each of these release groups had imprecise survival estimates. Estimates of detection probability for release groups with lower sample sizes also showed lower precision (Figure \@ref(fig:det-plot), Table \@ref(tab:tab-4)). The target sample size was a minimum of 300 tagged fish per release group, and the results suggest that reaching the target sample size may improve survival estimates. In addition to low sample sizes, low detection probabilities at some in-stream arrays, such as SFG, may be reducing the precision associated with reach-specific survival estimates.
+Release groups with low sample sizes tended to have lower precision of reach-specific survival estimates. For example, Burnt Log Creek, Grouse Creek, and Summit Creek had sample sizes of 52, 168, and 174 tagged fish, respectively; each of these release groups had imprecise survival estimates. Estimates of detection probability for release groups with lower sample sizes also showed lower precision (Figure \@ref(fig:det-plot), Table \@ref(tab:tab-4)). The target sample size was a minimum of 300 tagged fish per release group, and the results suggest that reaching the target sample size may improve survival estimates. In addition to low sample sizes, low detection probabilities at some in-stream arrays, such as SFG and SC12, may be reducing the precision associated with reach-specific survival estimates.
 
-To improve survival estimates, future modeling efforts will leverage shared detection sites among release groups by estimating a single detection probability per detection site. This approach will also reduce variability in estimates of detection probability for a single detection site. For example, estimates of detection probability for ZEN varied from 0.135 to 0.670 for different release groups (Table \@ref(tab:tab-4)), although emigration timing appears to be similar among groups (Figure \@ref(fig:emigration-plot)). Using multiple release groups to estimate a single detection probability may improve the precision of model estimates by increasing the sample size associated with downstream detection sites.
+To improve survival estimates, future modeling efforts will leverage shared detection sites among release groups by estimating a single detection probability per detection site. This approach will also reduce variability in estimates of detection probability for a single detection site. For example, estimates of detection probability for ZEN varied from 0.135 to 0.670 for different release groups (Table \@ref(tab:tab-4)), although emigration timing appears to be similar among groups (Figure \@ref(fig:emigration-plot)). Using multiple release groups to estimate a single detection probability may improve the precision of model estimates by increasing the sample size associated with downstream detection sites. A similar approach may be used for sites with both summer and fall tag groups. For appropriate reaches and detection sites, a single survival or detection probability will be estimated for both summer- and fall-tagged fish. As with the multiple release group approach, using both summer- and fall-tagged fish in a single model will increase the sample sizes associated with downstream detection and reach-specific survival estimates.
 
 ```{r tab-3, echo = F, warning = F}
 survival_tbl %>%
@@ -336,50 +370,69 @@ surv_plot <- survival %>%
     arrange(mpg) %>%
     #mutate(release_site = fct_reorder(release_site))
     ggplot(aes(x = int_label, y = marray_est)) + 
-    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg), width = 0.1, linewidth = 1) +
-    geom_point(size = 4, aes(fill = mpg), shape = 21) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
     plot_theme + 
     facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 3) +
     scale_y_continuous(limits = c(0, 1)) + 
     scale_color_viridis_d(option = "viridis", name = "MPG") +
     scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
     theme(strip.background = element_rect(fill = "grey", color = "black"), 
           axis.text.x = element_text(angle = 45, hjust = 1)) + 
     ylab("Survival") + 
     xlab(" ")
 
-#detection figures
-detection_plot <- detection %>%
-    mutate(site = fct_reorder(from_site, interval)) %>%
+
+det_plot <- detection %>%
     left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
               by = "release_site") %>%
     arrange(mpg) %>%
-    ggplot(aes(x = site, y = marray_est)) + 
-    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg), width = 0.1, linewidth = 1) +
-    geom_point(size = 4, aes(fill = mpg), shape = 21) + 
+    mutate(site = reorder_within(from_site, interval, release_site))
+
+
+#detection figures
+detection_plot <- detection %>%
+    mutate(site = reorder_within(from_site, interval, release_site)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    ggplot(aes(x = (site), y = marray_est)) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
     plot_theme + 
     facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 3) +
+    scale_x_reordered() +
     scale_y_continuous(limits = c(0, 1)) + 
     scale_color_viridis_d(option = "viridis", name = "MPG") +
     scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
     theme(strip.background = element_rect(fill = "grey", color = "black"), 
           axis.text.x = element_text(angle = 45, hjust = 1)) + 
     ylab("Detection probability") + 
     xlab("Site")
 
 cumulative_plot <- cumulative %>%
-    mutate(site = fct_reorder(to_site, interval)) %>%
+    mutate(site = reorder_within(to_site, interval, release_site)) %>%
     left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
               by = "release_site") %>%
     arrange(mpg) %>%
     ggplot(aes(x = site, y = marray_est)) + 
-    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg), width = 0.1, linewidth = 1) +
-    geom_point(size = 4, aes(fill = mpg), shape = 21) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
     plot_theme + 
     facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 3) +
+    scale_x_reordered() +
     scale_y_continuous(limits = c(0, 1)) + 
     scale_color_viridis_d(option = "viridis", name = "MPG") +
     scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
     theme(strip.background = element_rect(fill = "grey", color = "black"), 
           axis.text.x = element_text(angle = 45, hjust = 1)) + 
     ylab("Cumulative survival") + 

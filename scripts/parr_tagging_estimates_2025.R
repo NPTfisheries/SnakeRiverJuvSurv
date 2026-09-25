@@ -43,6 +43,21 @@ mark_df <- map_df(mark_groups$mark_file,
                   ~readRDS(file.path(file_path, .))
 )
 
+#separate groups by when they were tagged, using Aug 31 as cutoff between fall and summer tagging
+mark_df <- mark_df %>%
+  mutate(mark_season = if_else(event_date > '2025-08-31', "Fall", "Summer"))
+
+ggplot(mark_df, aes(x = event_date)) + 
+  geom_histogram() + 
+  facet_wrap(~release_site, scale = "free_y")
+
+mark_by_month <- mark_df %>% 
+  group_by(release_site, mark_season) %>%
+  count()
+
+
+#AMERR, LOLOC, NEWSOC, REDR have summer and fall tagging events that likely should not be combined
+
 spp <- c('12W', '11W') #wild spring/summer chinook
 
 #parr tagging locations        
@@ -60,7 +75,11 @@ mark_site <- c('BURNLC',
                'BEAR6C', 
                'HURRIC', 
                'WALLOR', 
-               'LOLOC')
+               'LOLOC', 
+               'AMERR', 
+               'CROOKR', 
+               'NEWSOC', 
+               'REDR')
 
 # list of tag_ids to use as marks
 tag_ids <- mark_df %>%
@@ -126,15 +145,14 @@ ch_long <- ch_df %>%
                      release_site = release_site,
                      mark_release_date = release_date,
                      release_season = event_season,
+                     mark_season,
                      brood_year,
                      migration_year,
                      text_comments,
                      conditional_comments),
             by = 'tag_code')
-# 
-# %>%
-#   filter(release_site == 'JOHTRP',
-#          release_season == 'Summer/Fall')
+  
+
 
 
 #check some numbers
@@ -144,6 +162,7 @@ table(ch_long$event_type)
 table(ch_long$release_site)
 table(ch_long$release_season)
 table(ch_long$srr)
+table(ch_long$mark_season)
 table(ch_long$text_comments) 
 table(ch_long$conditional_comments) 
 
@@ -151,6 +170,8 @@ table(ch_long$conditional_comments)
 lgr <- c('GRJ', 'GRS') #s = spillway, #j = juvenile bypass
 down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
           "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
+SC12 <- c('SC1', 'SC2') #pool detections at SC1 and SC2
+LC12 <- c('LC1', 'LC2') #pool detections at LC1 and LC2
 
 obs_tbl <- tibble(
   release_site = c('BURNLC', 
@@ -167,7 +188,12 @@ obs_tbl <- tibble(
                    'BEAR6C', 
                    'HURRIC', 
                    'WALLOR', 
-                   'LOLOC'),
+                   'LOLOC',
+                   'AMERR', 
+                   'CROOKR', 
+                   'NEWSOC', 
+                   'REDR'
+                   ),
   obs_loc = list(
     list(
       BURNLC = "BURNLC",
@@ -265,32 +291,68 @@ obs_tbl <- tibble(
     ), 
     list(
       LOLOC = "LOLOC", 
-      LC2 = "LC2",
-      LC1 = "LC1", 
-      CWR = "CWR", 
+      LC12 = LC12,
       LGR = lgr, 
       Down = down
-    )
+    ), 
+    list(
+      AMERR = "AMERR", 
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12, 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      CROOKR = "CROOKR",
+      CRA = "CRA",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      NEWSOC = "NEWSOC",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      REDR = "REDR",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ) 
   )
 )
 
 ch_long_list <- ch_long %>%
-  group_by(srr, release_site, release_season) %>%
+  group_by(srr, release_site, release_season, mark_season) %>%
   nest() %>%
   left_join(obs_tbl)
 
-ch_long %>%
-  group_by(srr, release_site, release_season) %>% 
-  count()  
+ch_long_list <- ch_long_list %>%
+  ungroup() %>%
+  unite("release_site",  c("release_site", "mark_season"), sep = "_")
+
+ 
 
 parr_estimates <- run_cjs_model_set(ch_long_list)
 
-parr_survival_estimates <- parr_estimates$estimates
+  
 parr_survival_tbl <- parr_estimates$model_tbl
+
+
 
 
 saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
 saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
+saveRDS(obs_tbl, file = "data/parr_tagging_obs_tbl.RDS")
 ####FIGURES#####
 
 

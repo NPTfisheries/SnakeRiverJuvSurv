@@ -123,6 +123,8 @@ ch_long <- ch_df %>%
   left_join(mark_df %>%
               select(tag_code = pit_tag,
                      srr = species_run_rear_type,
+                     mrr_project = mrr_project,
+                     organization = organization,
                      release_site = release_site,
                      mark_release_date = release_date,
                      release_season = event_season,
@@ -138,14 +140,18 @@ ch_long <- ch_df %>%
 
 
 #check some numbers
-table(ch_long$last_disposition)
-table(ch_long$obs_site)
+table(ch_long$organization)
+table(ch_long$mrr_project)
+table(ch_long$release_season)
+
 table(ch_long$event_type)
 table(ch_long$release_site)
-table(ch_long$release_season)
+table(ch_long$obs_site)
+
 table(ch_long$srr)
 table(ch_long$text_comments) 
 table(ch_long$conditional_comments) 
+table(ch_long$last_disposition)
 
 
 lgr <- c('GRJ', 'GRS') #s = spillway, #j = juvenile bypass
@@ -289,19 +295,103 @@ parr_survival_estimates <- parr_estimates$estimates
 parr_survival_tbl <- parr_estimates$model_tbl
 
 
-saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
-saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
+#saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
+#saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
 ####FIGURES#####
+
+plot_dat <- parr_survival_estimates %>%
+  mutate(
+    pop = case_when(
+      release_site %in% c("BURNLC", "JOHNSC", "SAEFSF") ~ "ESS",
+      release_site %in% c("GROUSC", "LAKEC", "SECESR", "SUMITC") ~ "ZEN",
+      release_site == "SALRSF" ~ "KRS",
+      release_site %in% c("CAPEHC", "MARSHC") ~ "MAR",
+      release_site %in% c("WALLOR", "HURRIC") ~ "WR2",
+      release_site == "LOLOC" ~ "LC2",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(
+    metric == "survival",
+    interval != 4,
+    !is.na(pop)
+  ) %>%
+  unite(
+    col = "int_label",
+    from_site,
+    to_site,
+    sep = " to ",
+    remove = FALSE
+  ) %>%
+  arrange(pop, interval) %>%
+  mutate(
+    facet_interval = paste(pop, interval, sep = "_")
+  )
+
+
+plot_dat <- plot_dat %>%
+  mutate(
+    facet_interval = factor(
+      facet_interval,
+      levels = unique(facet_interval)
+    )
+  )
+
+site_labels <- plot_dat %>%
+  distinct(facet_interval, to_site) %>%
+  tibble::deframe()
+
+plot_dat %>%
+  ggplot(
+    aes(
+      x = facet_interval,
+      y = marray_est,
+      colour = release_site
+    )
+  ) +
+  geom_point(
+    size = 3,
+    position = position_dodge(width = 0.25)
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = marray_lcl,
+      ymax = marray_ucl
+    ),
+    width = 0.1,
+    position = position_dodge(width = 0.25)
+  ) +
+  plot_theme +
+  facet_wrap(
+    ~pop,
+    scales = "free_x"
+  ) +
+  scale_x_discrete(
+    labels = site_labels
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1)
+  ) +
+  theme(
+    strip.background = element_rect(
+      fill = "grey",
+      color = "black"
+    )
+  ) +
+  ylab("Survival") +
+  xlab("Detection Site")
+
 
 
 parr_survival_estimates %>%
   filter(metric == "survival", interval != 4) %>%
   unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
-  ggplot(aes(x = as.factor(interval), y = cjs_est)) + 
+  ggplot(aes(x = as.factor(interval),
+             y = marray_est)) + 
   geom_point(size = 3) + 
   geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl), width = 0.1) +
   plot_theme + 
-  facet_wrap(~release_site) +
+  facet_wrap(~release_site, scales = 'free_x') +
   scale_y_continuous(limits = c(0, 1)) + 
   theme(strip.background = element_rect(fill = "grey", color = "black")) + 
   ylab("Survival") + 
@@ -319,7 +409,7 @@ parr_survival_estimates %>%
   ylab("Detection probability") + 
   xlab("Site")
 
-parr_estimates_long <- sf_parr_survival_estimates %>%
+parr_estimates_long <- parr_survival_estimates %>%
   pivot_longer(cols = matches("^(cjs|mscjs|marray)_(est|lcl|ucl)$"),
                names_to = c("model", ".value"),
                names_pattern = "(cjs|mscjs|marray)_(est|lcl|ucl)")

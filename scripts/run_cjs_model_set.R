@@ -7,7 +7,8 @@ check_mark_groups <- function(activity = c('parr', 'rst', 'hatchery'), event_typ
   
   stopifnot(!is.null(migratory_year)|!is.integer(migratory_year))#{'migratory_year must be a postive integer'}
   
-  file_path <<- paste0('./output/events_', activity, "/MY", mig_yr, "/", event_type)
+  #file_path <<- paste0('./output/events_', activity, "/MY", mig_yr, "/", event_type)
+  file_path <<- paste0('./data/output/events_', activity, "/tag_yr", tag_yr, "/", event_type)
   
   # find available mark groups
   mark_groups <- list.files(
@@ -48,7 +49,8 @@ check_mark_groups_tag_yr <- function(activity = c('parr', 'rst', 'hatchery'), ev
   
   stopifnot(!is.null(tag_year)|!is.integer(tag_year))#{'tag_year must be a postive integer'}
   
-  file_path <<- paste0('./output/events_', activity, "/tag_yr", tag_yr, "/", event_type)
+  #file_path <<- paste0('./output/events_', activity, "/MY", mig_yr, "/", event_type)
+  file_path <<- paste0('./data/output/events_', activity, "/tag_yr", tag_yr, "/", event_type)
   
   # find available mark groups
   mark_groups <- list.files(

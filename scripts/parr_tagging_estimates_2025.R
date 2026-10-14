@@ -393,7 +393,7 @@ fit_multiple <- fit_marray_cjs_multiple(marray_list,
                                               shared_p, shared_phi)
 
 shared_p <- "All"
-shared_phi_seasonal <- list(list(groups = c("NEWSOC_Summer", "NEWSOC_Fall"), interval = c(2, 3, 4)), 
+shared_phi <- list(list(groups = c("NEWSOC_Summer", "NEWSOC_Fall"), interval = c(2, 3, 4)), 
                    list(groups = c("REDR_Summer", "REDR_Fall"), interval = c(2, 3, 4)), 
                    list(groups = c("AMERR_Summer", "AMERR_Fall"), interval = c(2, 3, 4)), 
                    list(groups = c("LOLOC_Summer", "LOLOC_Fall"), interval = c(2)))

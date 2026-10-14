@@ -27,7 +27,8 @@ proj_codes <- c(
   'CDR', # Craig Rabe
   'GAA', #NOAA
   'PJC', #NE OR
-  'SCS' #OFO
+  'SCS', #OFO
+  'BDA' #also OFO
  ) 
 
 proj_years <- expand.grid('mrr_project' = proj_codes,
@@ -185,9 +186,11 @@ definition_files_diff_parr <- parr_pdv_map %>%
 max(events_parr$event_date)
 min(events_parr$event_date)
 
-#only steelhead tagged after August 31
+#lots of tagging in the Clearwater happened in the fall
 events_parr %>% filter(event_date > "2025-08-31") %>% group_by(species_run_rear_type) %>% count() 
 
+events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_type == "11W") %>% group_by(release_site) %>% count()
+ 
 # Subset events to 'Mark' only, save output, and create tag id txt file for
 # PTAGIS upload.  You could iterate across the event_type_value to create
 # separate files for each event.
@@ -223,7 +226,8 @@ events_parr %>% filter(event_date > "2025-08-31") %>% group_by(species_run_rear_
    'CDR', # Craig Rabe
    'GAA', #NOAA
    'PJC', #NE OR
-   'SCS' #OFO
+   'SCS', #OFO
+   'BDA'  #OFO
  ) 
  
  proj_years <- expand.grid('mrr_project' = proj_codes,

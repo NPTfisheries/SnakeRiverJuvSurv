@@ -9,6 +9,7 @@
 library(PITmodelR)
 library(tidyverse)
 library(marked)
+library(RTMB)
 
 plot_theme <- readRDS("./docs/plot_theme_v2.RDS")
 
@@ -353,6 +354,55 @@ parr_survival_tbl <- parr_estimates$model_tbl
 saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
 saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
 saveRDS(obs_tbl, file = "data/parr_tagging_obs_tbl.RDS")
+
+### multiple release group model ####
+
+#define all as summer chinook so they will run together
+ch_long_list_mult <- ch_long_list %>%
+  mutate(srr = '12W')
+
+ch_long_list_mult <- ch_long_list_mult %>%
+  mutate(
+    ch = map2(
+      data,
+      obs_loc,
+      ~ build_capture_histories(
+        tag_history = .x,
+        locs_def = .y,
+        site_col = "obs_site",
+        tag_col = "tag_code",
+        time_col = "first_obs",
+        censor_col = "last_censored",
+        covariate_cols = NULL
+      )
+    )
+  )
+
+#individual m array for each release group
+marray_list <- ch_long_list_mult %>%
+  mutate(m_array = map(
+    ch, ~(marray = .x$m_array))) %>%
+  select(srr, release_site, m_array) %>%
+  rename(release_group = release_site)
+
+#full shared detection site model
+shared_p <- "All"
+shared_phi <- "None"
+
+fit_multiple <- fit_marray_cjs_multiple(marray_list, 
+                                              shared_p, shared_phi)
+
+shared_p <- "All"
+shared_phi_seasonal <- list(list(groups = c("NEWSOC_Summer", "NEWSOC_Fall"), interval = c(2, 3, 4)), 
+                   list(groups = c("REDR_Summer", "REDR_Fall"), interval = c(2, 3, 4)), 
+                   list(groups = c("AMERR_Summer", "AMERR_Fall"), interval = c(2, 3, 4)), 
+                   list(groups = c("LOLOC_Summer", "LOLOC_Fall"), interval = c(2)))
+
+fit_multiple_shared_phi <- fit_marray_cjs_multiple(marray_list, shared_p, shared_phi = shared_phi_seasonal)
+
+saveRDS(fit_multiple, file = "data/parr_tagging/parr_estimates_multiple_2025.RDS")
+saveRDS(fit_multiple_shared_phi, file = "data/parr_tagging/parr_estimates_multiple_shared_phi_2025.RDS")
+
 ####FIGURES#####
 
 

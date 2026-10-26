@@ -1100,14 +1100,14 @@ surv_plot_mult <- survival_mult %>%
 
 
 cum_plot_mult <- cumulative_mult %>%
-    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    #unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
     mutate(interval = as.numeric(interval)) %>%
-    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    mutate(to_site = fct_reorder(to_site, interval)) %>%
     left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
               by = "release_site") %>%
     arrange(mpg) %>%
     #mutate(release_site = fct_reorder(release_site))
-    ggplot(aes(x = int_label, y = estimate)) + 
+    ggplot(aes(x = to_site, y = estimate)) + 
     geom_errorbar(aes(ymin = lcl, ymax = ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
     geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
     plot_theme + 

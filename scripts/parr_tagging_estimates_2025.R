@@ -342,18 +342,16 @@ ch_long_list <- ch_long_list %>%
   unite("release_site",  c("release_site", "mark_season"), sep = "_")
 
  
-
+#CJS estimates using individual model
 parr_estimates <- run_cjs_model_set(ch_long_list)
 
-  
 parr_survival_tbl <- parr_estimates$model_tbl
-
-
-
 
 saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
 saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
 saveRDS(obs_tbl, file = "data/parr_tagging_obs_tbl.RDS")
+
+
 
 ### multiple release group model ####
 
@@ -392,6 +390,9 @@ shared_phi <- "None"
 fit_multiple <- fit_marray_cjs_multiple(marray_list, 
                                               shared_p, shared_phi)
 
+#Run the model with shared survival for groups with summer and fall tagging
+#first interval is estimated separately (release to first detection)
+#all subsequent intervals are shared
 shared_p <- "All"
 shared_phi <- list(list(groups = c("NEWSOC_Summer", "NEWSOC_Fall"), interval = c(2, 3, 4)), 
                    list(groups = c("REDR_Summer", "REDR_Fall"), interval = c(2, 3, 4)), 
@@ -402,6 +403,7 @@ fit_multiple_shared_phi <- fit_marray_cjs_multiple(marray_list, shared_p, shared
 
 saveRDS(fit_multiple, file = "data/parr_tagging/parr_estimates_multiple_2025.RDS")
 saveRDS(fit_multiple_shared_phi, file = "data/parr_tagging/parr_estimates_multiple_shared_phi_2025.RDS")
+
 
 ####FIGURES#####
 
@@ -451,7 +453,9 @@ parr_estimates_long %>%
   xlab("Interval")
 
 
-#### 2026 tagging 
+#### 2026 tagging
+
+#summarise number of fish tagged by site in 2026
 
 activity <- 'parr' # used for directory path and hatchery, rst
 tag_yr = 2026

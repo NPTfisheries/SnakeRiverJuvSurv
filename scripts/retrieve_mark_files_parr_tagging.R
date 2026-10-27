@@ -1,8 +1,8 @@
 # Purpose: Retrieve juvenile MRR records from uploaded PTAGIS files and write
 # responses from get_batch_file_data() to file.
-# Author: Ryan Kinzer
+# Author: Ryan Kinzer, Michelle Briggs
 # Created: 16 March 2026
-# Modified: 07 August 2026
+# Modified: 28 September 2026
 
 
 # load libraries

@@ -1,0 +1,1314 @@
+---
+title: "Estimating survival for juvenile Chinook salmon during downstream migration"
+author:
+
+- Michelle A. Briggs:
+    email: michelleb@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+- Ryan N. Kinzer:
+    email: ryank@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::html_document2:
+    theme: cerulean
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    number_sections: yes
+    #css: "../templates/styles.css"
+    pandoc_args:
+     - "--lua-filter=templates/scholarly-metadata.lua"
+     - "--lua-filter=templates/author-info-blocks.lua"
+     - "--lua-filter=templates/pagebreak.lua"
+  # bookdown::word_document2:
+  #   toc: yes
+  #   toc_depth: 4
+  #   reference_docx: "../templates/Word_template_draft.docx"
+institute:
+- npt_mccall: Nez Perce Tribe, Department of Fisheries Resources Management, 14054 Burr Dr., McCall, Idaho, 83638, USA
+csl: "templates/american-fisheries-society.csl"
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+bibliography: references.bib
+---
+
+<!-- the following inserts the NPT logo into header and sets a watermark -->
+```{=html}
+<!-- <script> -->
+<!--    $(document).ready(function() { -->
+<!--      $head = $('#header'); -->
+<!--      $head.prepend('<img src=\"NPT.png\" style=\"float: right;width: 150px;\"/>') -->
+<!--      $head.prepend('<img src=\"DFRM.png\" style=\"float: right;width: 150px;\"/>') -->
+<!--    }); -->
+<!-- </script> -->
+ 
+<!-- <style> -->
+<!-- p.caption { -->
+<!--   font-size: 100%; -->
+<!-- } -->
+<!-- </style> -->
+ 
+ 
+<img src="templates/NPT.png" style="position:absolute;top:75px;right:0px;width: 125px;" />
+<img src="templates/DFRM.png" style="position:absolute;top:75px;right:-150px;width: 125px;" />
+<div class="watermark">DRAFT</div>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = FALSE, warning = FALSE)
+```
+
+```{r, include = FALSE}
+
+#remotes::install_github("ryankinzer/PITmodelR", ref = "dev", build_vignettes = F, force = T)
+
+library(PITmodelR)
+library(tidyverse)
+library(RTMB)
+library(ggh4x)
+library(viridis)
+library(ggpubr)
+library(knitr)
+library(kableExtra)
+library(tidytext)
+
+plot_theme <- readRDS("templates/plot_theme_v2.RDS")
+```
+
+```{r define-scenarios}
+
+#number of occasions
+n_occ <- 4
+
+#number of fish tagged
+n_init <- matrix(c(150, 300, 600), byrow = TRUE, ncol = 1)
+
+#number of additional tags added per occasion
+n_add <- c(0, 0, 0, 0)
+
+#survival
+phi_sim_mat <- matrix(c(0.6, 0.6, 0.6), 
+                 byrow = TRUE, ncol = 3)
+
+#detection
+p_sim_mat <- matrix(c(1, 0.5, 0.5, 0.5, 
+                      1, 0.25, 0.25, 0.5,
+                      1, 0.05, 0.5, 0.5, 
+                      1, 0.05, 0.25, 0.5), 
+                    byrow = TRUE, ncol = 4)
+
+#proportion of fish removed by occasion
+#Removal probability appears to be ~2%, so set a constant removal probability
+removals <- c(0, 0.02, 0.02, 0.02)
+
+#number of release_groups
+n_rel_groups <- 3
+
+#matrix, rows = release groups, cols = occasions
+sites <- matrix(c("relA", "det1", "det2", "det3", 
+                  "relB", "det1", "det2", "det3", 
+                  "relC", "det1", "det2", "det3"), nrow = n_occ, ncol = n_rel_groups)
+
+#number of iterations per scenario
+n_iter <- 500
+
+scenario_grid <- expand_grid(
+  n_init_sim = 1:nrow(n_init),
+  s_sim = 1:nrow(phi_sim_mat),
+  p_sim = 1:nrow(p_sim_mat)
+  #r_sim = 1:nrow(removals)
+) %>%
+  mutate(N = map(n_init_sim, ~n_init[.x, ]),
+    S = map(s_sim, ~ phi_sim_mat[.x, ]),
+    p = map(p_sim, ~ p_sim_mat[.x, ])
+    #remove = map(r_sim, ~ removals[.x, ])
+    )
+
+n_scenarios <- dim(scenario_grid)[1]
+```
+
+```{r run-sims, eval=FALSE}
+#Do not re-run the simulations
+
+
+
+phi_mult_list <- vector("list", length = n_scenarios * n_iter)
+p_mult_list <- vector("list", length = n_scenarios * n_iter)
+phi_ind_list <- vector("list", length = n_scenarios * n_iter)
+p_ind_list <- vector("list", length = n_scenarios * n_iter)
+counter <- 1
+
+for (t in 1:dim(scenario_grid)[1]) {
+  for (i in 1:n_iter) { #500 iterations per scenario
+    
+    sim_list <- vector("list", length = n_rel_groups)
+    
+    for (g in 1:n_rel_groups) { #loop over release groups
+      
+      obs_loc <- as.list(sites[, g])
+      names(obs_loc) <- sites[, g]
+
+        #simulate dataset
+        sim_events <- simulate_cjs_events(
+          n_init = scenario_grid$N[[t]],
+          n_add = n_add,
+          sites = sites[, g],
+          S = scenario_grid$S[[t]],
+          p = scenario_grid$p[[t]],
+          #remove_prob = scenario_grid$remove_prob[[t]]
+          remove_prob = c(0, 0.02, 0.02, 0.02)
+          )
+        
+        #format dataset
+        sim_compile <- tibble(
+          srr = "sim",
+          release_site = sites[1, g],
+          release_season = "test",
+          data = list(sim_events),
+          obs_loc = list(obs_loc))
+        
+        sim_list[[g]] <- sim_compile
+        
+    }
+    
+   sim_list_df <- bind_rows(sim_list)
+   
+   #create ch and m array  
+   sim_long_list <- sim_list_df %>%
+      mutate(
+        ch = map2(
+          data,
+          obs_loc,
+          ~ build_capture_histories(
+            tag_history = .x,
+            locs_def = .y,
+            site_col = "obs_site",
+            tag_col = "tag_code",
+            time_col = "first_obs",
+            censor_col = "last_censored",
+            covariate_cols = NULL
+          )
+        )
+      )
+    
+    #individual m array for each release group
+    marray_list <- sim_long_list %>%
+      mutate(m_array = map(
+        ch, ~(marray = .x$m_array))) %>%
+      select(srr, release_site, m_array) %>%
+      rename(release_group = release_site)
+      
+    #fit the multiple release group m-array model
+    #shared p for detection sites
+    #all unique survival parameters
+    fit_mult <- fit_marray_cjs_multiple(marray_list, shared_p = "All", shared_phi = "None")
+    
+    #fit the independent release group m-array model
+    fit_ind <- marray_list %>%
+      mutate(fit = map(m_array, ~fit_marray_cjs(.x)))
+    
+    #format fit_ind
+    phi_ind_list_g <- vector("list", length = n_rel_groups)
+    
+    for (g in 1:n_rel_groups) {
+      phi <- fit_ind$fit[[g]]$phi
+      phi <- phi %>%
+        mutate(release_group = sites[1, g], 
+               from_site = sites[, g][seq(1, n_occ - 2)], 
+               to_site = sites[, g][seq(2, n_occ - 1)], 
+               scenario = t, 
+               iter = i)
+      
+      phi_ind_list_g[[g]] <- phi
+    }      
+      
+    phi_ind <- bind_rows(phi_ind_list_g)  
+    
+    p_ind_list_g <- vector("list", length = n_rel_groups)
+    
+    for (g in 1:n_rel_groups) {
+      p <- fit_ind$fit[[g]]$p
+      p <- p %>%
+        mutate(release_group = sites[1, g], 
+               site = sites[, g][seq(2, n_occ - 1)], 
+               scenario = t, 
+               iter = i)
+      
+      p_ind_list_g[[g]] <- p
+    }      
+    
+    p_ind <- bind_rows(p_ind_list_g) 
+    
+    #format fit_mult
+    phi_mult <- fit_mult$phi %>%
+      mutate(scenario = t, 
+                 iter = i)
+        
+    p_mult <- fit_mult$p %>%
+      mutate(scenario = t, 
+                 iter = i)
+        
+    #add estimates to list, separately by phi and p for grouped and independent
+    phi_mult_list[[counter]] <- phi_mult
+    p_mult_list[[counter]] <- p_mult
+    phi_ind_list[[counter]] <- phi_ind
+    p_ind_list[[counter]] <- p_ind
+    
+    counter <- counter + 1
+        
+      }
+    }
+
+phi_mult <- bind_rows(phi_mult_list)
+p_mult <- bind_rows(p_mult_list)
+phi_ind <- bind_rows(phi_ind_list)
+p_ind <- bind_rows(p_ind_list)
+
+saveRDS(phi_mult, file = "data/sim_output/phi_multiple_release_model.RDS")
+saveRDS(p_mult, file = "data/sim_output/p_multiple_release_model.RDS")
+saveRDS(phi_ind, file = "data/sim_output/phi_single_release_model.RDS")
+saveRDS(p_ind, file = "data/sim_output/p_single_release_model.RDS")
+```
+
+## Survival model
+
+We used the M-array formulation of the Cormack-Jolly-Seber (CJS) model [@burnham1987; @seber1965; @jolly1965] to estimate survival of juvenile spring/summer (sp/sum) Chinook salmon (*Oncorhynchus tshawytscha*) during downstream migration from natal tributaries to Lower Granite Dam. We developed an M-array CJS model to estimate survival and detection probability for multiple release groups in a single model (multiple release group model). Groups of juvenile Chinook salmon are PIT-tagged and released at discrete locations; as the fish migrate downstream, multiple release groups will pass common in-stream PIT tag arrays. Eventually, all release groups pass Lower Granite Dam through either the spillway or the juvenile bypass system, followed by detection locations downstream of Lower Granite Dam, including hydrosystem facilities or PIT tag arrays in the lower Columbia River. By sharing information among release groups, sample sizes associated with the estimates of detection probability for downstream detection sites are increased. 
+
+The multiple release group model typically estimates a single detection probability (*p*) for each detection site, excluding the final detection site. In this application, a detection probability parameter is estimated for each in-stream PIT tag array and for Lower Granite Dam. The model may also be specified to estimate a unique detection probability for each release group at a given detection site. Estimating unique detection probabilities for each release group may be appropriate if migration timing is variable among release groups. Tyipcally, a unique reach-specific survival parameter ($\phi$) is estimated for each release group and reach. Reach-specific survival is defined as the probability of survival from one detection site to the subsequent downstream detection site. However, if appropriate, reach-specific survival may be defined as a single, shared parameter for specified release groups and reaches.For the final reach (i.e., downstream of Lower Granite Dam), a single parameter $\lambda$ is estimated, because survival and detection cannot be estimated independently. A unique $\lambda$ parameter is estimated for each release group. Assumptions associated with the M-array CJS model include the following: within release groups, each tagged fish has the same probability of detection and survival; tags are not lost or misread; and survival and detection probabilities of each tagged fish are independent of any other fish. Additionally, if detection probabilities are shared among release groups, we assume that detection probability at the specified detection site is the same among release groups.
+
+Our objectives were (1) to use simulations to assess the accuracy and precision of survival estimates produced by the multiple release group model; (2) to use the multiple release group model to estimate reach-specific survival for juvenile sp/sum Chinook salmon tagged in 2025; and (3) to compare survival estimates from the multiple release group model to estimates produced by fitting independent M-array CJS models to data from each release group. 
+
+## Simulations
+
+### Methods
+
+We produced simulated datasets to assess the accuracy and precision of the multiple release group model used to estimate the survival of juvenile Chinook salmon during downstream migration. We simulated datasets for three unique release groups, representing parr tagging occurring in three natal tributaries. Simulated mark-recapture datasets included four occasions, representing four opportunities to detect each individual fish. The first occasion represented a marking event, the second occasion represented a detection at an in-stream PIT tag array, the third occasion represented detection at Lower Granite Dam, and the final occasion represented detection downstream of Lower Granite Dam (Figure \@ref(fig:diagram)). Simulations were produced for twelve scenarios with varying numbers of tagged fish and varying detection probabilities. The number of tagged fish per tributary (sample size) was either 150, 300, or 600. Detection probabilities were 0.5 for the final occasion (i.e., downstream of Lower Granite Dam) for all scenarios. Detection probability for the second and third occasions was 0.5 and 0.5; 0.25 and 0.25; 0.05 and 0.5; or 0.05 and 0.25. The probability of removal (i.e., censoring) due to transport or lethal sampling was set to 0.02 for all occasions following the marking event. Survival probability was 0.6 for each reach for all scenarios. Simulated datasets were produced for each combination of sample size and detection probability, and we ran 500 iterations of each scenario.
+
+Each simulated dataset was analyzed using two approaches. First, each dataset was analyzed using multiple release group model with shared parameters for detection probability among all three release groups. The multiple release group model estimated six survival parameters (one per reach per release group), two detection parameters (one per detection site), and three $\lambda$ parameters (one per release group). Each dataset was subsequently analyzed using individual M-array CJS models for each release group. Using the individual approach, each model estimated two survival, two detection, and one $\lambda$ parameter, and no data were shared among release groups (Figure @ref(fig:diagram)).
+
+To assess accuracy and precision of survival and detection estimates, we compared the estimates to the true (simulated) values. We assessed the accuracy of estimates by calculating bias and root mean squared error. Bias was calculated as the difference between the simulated value and model estimate. Root mean squared error (RMSE) was calculated for each metric and scenario as:
+
+$\text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i- y_i)^2}$,
+
+where n is the number of iterations, $y_i$ is the true (simulated) value, and $\hat{y}_i$ is the estimated value. To assess precision, we examined the median width of the 95% confidence intervals among different scenarios. Bias and precision were compared between the multiple release group and independent models.
+
+```{r diagram, results = T, fig.cap = "Depiction of the simulated stream network and detection sites, and the parameters estimated in (A) the multiple release group model and (B) the independent model."}
+
+knitr::include_graphics("docs/simulation_schematic.jpg")
+```
+
+```{r format-sim-output}
+#read in and format output for summary
+phi_mult <- readRDS('data/sim_output/phi_multiple_release_model.RDS')
+p_mult <- readRDS("data/sim_output/p_multiple_release_model.RDS")
+phi_ind <- readRDS("data/sim_output/phi_single_release_model.RDS")
+p_ind <- readRDS("data/sim_output/p_single_release_model.RDS")
+
+#format simulation output
+phi_ind <- phi_ind %>%
+  select(release_group, from_site, to_site, estimate, lcl, ucl, scenario, iter) %>%
+  rename(phi = estimate) %>%
+  mutate(model = "individual", 
+         interval = if_else(to_site == "det1", 1, 2))
+
+p_ind <- p_ind %>%
+  select(estimate, lcl, ucl, site, release_group, scenario, iter) %>%
+  rename(p = estimate) %>%
+  mutate(model = "individual", 
+         interval = if_else(site == "det1", 2, 3))
+
+phi_mult <- phi_mult %>%
+  mutate(model = "grouped", 
+         interval = if_else(to_site == "det1", 1, 2))
+
+p_mult <- p_mult %>%
+  mutate(model = "grouped", 
+         interval = if_else(site == "det1", 2, 3)) %>%
+  rename(scenario = scenaro)
+
+#attach simulated values
+scenario_inputs <- scenario_grid %>%
+  mutate(
+    scenario = row_number(),
+    n_value = unlist(N),
+    p_values = sapply(p, function(x) paste(round(x[2:3], 3), collapse = ", ")), 
+    S_values = sapply(S, function(x) paste(round(x[1:2], 3), collapse = ", ")))
+
+phi_sim_values <- scenario_grid %>%
+  rownames_to_column(var = "scenario") %>%
+  mutate(scenario = as.integer(scenario)) %>%
+  select(scenario, s_sim, p_sim, S) %>%
+  unnest_longer(S, values_to = "input_value", indices_to = "interval") %>%
+  mutate(metric = "survival") %>%
+  select(scenario, p_sim, s_sim, interval, metric, input_value)
+
+p_sim_values <- scenario_grid %>%
+  rownames_to_column(var = "scenario") %>%
+  mutate(scenario = as.integer(scenario)) %>%
+  select(scenario, s_sim, p_sim, p) %>%
+  unnest_longer(p, values_to = "input_value", indices_to = "interval") %>%
+  mutate(metric = "detection") %>%
+  select(scenario, p_sim, s_sim, interval, metric, input_value)
+
+phi_mult <- phi_mult %>%
+  full_join(phi_sim_values, by = c("scenario", "interval")) %>%
+  left_join(scenario_inputs %>% select(scenario, n_init_sim), by = "scenario")
+
+phi_ind <- phi_ind %>%
+  full_join(phi_sim_values, by = c("scenario", "interval")) %>%
+  left_join(scenario_inputs %>% select(scenario, n_init_sim), by = "scenario")
+
+p_mult <- p_mult %>%
+  full_join(p_sim_values, by = c("scenario", "interval")) %>%
+  left_join(scenario_inputs %>% select(scenario, n_init_sim), by = "scenario")
+
+p_ind <- p_ind %>%
+  full_join(p_sim_values, by = c("scenario", "interval")) %>%
+  left_join(scenario_inputs %>% select(scenario, n_init_sim), by = "scenario")
+
+
+```
+
+```{r summarise-sim-output}
+phi_mult_bias <- phi_mult %>%
+  mutate(bias = phi - input_value, #raw bias
+         rel_bias = (phi-input_value)/input_value, #relative bias
+         pct_bias = rel_bias*100, #pct bias
+         ci_width = ucl - lcl, 
+         coverage = if_else(lcl <= input_value & ucl >= input_value, 1, 0))
+
+p_mult_bias <- p_mult %>%
+  mutate(bias = p - input_value, #raw bias
+         rel_bias = (p-input_value)/input_value, #relative bias
+         pct_bias = rel_bias*100, #pct bias
+         ci_width = ucl - lcl, 
+         coverage = if_else(lcl <= input_value & ucl >= input_value, 1, 0))
+
+phi_ind_bias <- phi_ind %>%
+   mutate(bias = phi - input_value, #raw bias
+         rel_bias = (phi-input_value)/input_value, #relative bias
+         pct_bias = rel_bias*100, #pct bias
+         ci_width = ucl - lcl, 
+         coverage = if_else(lcl <= input_value & ucl >= input_value, 1, 0))
+
+p_ind_bias <- p_ind %>%
+  mutate(bias = p - input_value, #raw bias
+         rel_bias = (p-input_value)/input_value, #relative bias
+         pct_bias = rel_bias*100, #pct bias
+         ci_width = ucl - lcl, 
+         coverage = if_else(lcl <= input_value & ucl >= input_value, 1, 0))
+
+phi_mult_summary <- phi_mult_bias %>%
+  group_by(scenario) %>%
+  summarise(mean_est = mean(phi, na.rm = T), 
+            median_est = median(phi, na.rm = T), 
+            mean_bias = mean(bias, na.rm = T), 
+            median_bias = median(bias, na.rm = T), 
+            q025 = quantile(bias, 0.025, na.rm = T), 
+            q975 = quantile(bias, 0.975, na.rm = T),
+            q25 = quantile(bias, 0.25, na.rm = T), 
+            q75 = quantile(bias, 0.75, na.rm = T),
+            mse = mean((phi - input_value)^2, na.rm = T), 
+            rmse = sqrt(mse), 
+            med_ci_width = median(ci_width, na.rm = T),
+            ci_width_q025 = quantile(ci_width, 0.025, na.rm = T),
+            ci_width_975 = quantile(ci_width, 0.975, na.rm = T), 
+            ci_width_q25 = quantile(ci_width, 0.25, na.rm = T),
+            ci_width_q75 = quantile(ci_width, 0.75, na.rm = T)) %>%
+            #prop_cov = sum(coverage, na.rm = T)/n_iter) %>%
+  full_join(scenario_inputs %>% select(scenario, n_init_sim, s_sim, p_sim), by = "scenario") %>%
+  mutate(model = "grouped")
+
+phi_ind_summary <- phi_ind_bias %>%
+  group_by(scenario) %>%
+  summarise(mean_est = mean(phi, na.rm = T), 
+            median_est = median(phi, na.rm = T), 
+            mean_bias = mean(bias, na.rm = T), 
+            median_bias = median(bias, na.rm = T), 
+            q025 = quantile(bias, 0.025, na.rm = T), 
+            q975 = quantile(bias, 0.975, na.rm = T),
+            q25 = quantile(bias, 0.25, na.rm = T), 
+            q75 = quantile(bias, 0.75, na.rm = T),
+            mse = mean((phi - input_value)^2, na.rm = T), 
+            rmse = sqrt(mse), 
+            med_ci_width = median(ci_width, na.rm = T),
+            ci_width_q025 = quantile(ci_width, 0.025, na.rm = T),
+            ci_width_975 = quantile(ci_width, 0.975, na.rm = T), 
+            ci_width_q25 = quantile(ci_width, 0.25, na.rm = T),
+            ci_width_q75 = quantile(ci_width, 0.75, na.rm = T)) %>%
+            #prop_cov = sum(coverage)/n_iter) %>%
+  full_join(scenario_inputs %>% select(scenario, n_init_sim, s_sim, p_sim), by = "scenario") %>%
+  mutate(model = "individual")
+```
+
+```{r make-sim-figs}
+#figures - is model accurate, and how do sample size and detection affect accuracy and precision? 
+
+p_sim_labels <- c("1" = "p = 0.5, 0.5", 
+                  "2" = "p = 0.25, 0.25", 
+                  "3" = "p = 0.05, 0.5", 
+                  "4" = "p = 0.05, 0.25")
+
+n_sim_labels <- c("1" = "N = 150", 
+                  "2" = "N = 300", 
+                  "3" = "N = 600")
+
+
+bias_density <- phi_mult_bias %>%
+  ggplot(aes(x = phi)) + 
+  geom_density(aes(fill = as.factor(n_init_sim)), alpha = 0.85) + 
+  facet_grid2(vars(p_sim), vars(n_init_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  n_init_sim = n_sim_labels)) + 
+  plot_theme + 
+  xlab("Survival estimate") + 
+  ylab("Density") + 
+  geom_vline(aes(xintercept = 0.6), linetype = "dashed", linewidth = 1) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = c(0, 0)) + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        panel.spacing = unit(6, "mm"))
+
+#if you have one low detection site, you need more than 300 tagged fish per tributary
+#detection estimates are pretty good
+
+p_bias_density <- p_mult_bias %>%
+  filter(interval == 3) %>%
+  ggplot(aes(x = p)) + 
+  geom_density(aes(fill = as.factor(n_init_sim)), alpha = 0.7) + 
+  facet_grid2(vars(p_sim), vars(n_init_sim), scales = "free_y", axes = "all", 
+              labeller = labeller(p_sim = p_sim_labels, 
+                                  n_init_sim = n_sim_labels)) + 
+  plot_theme + 
+  xlab("Detection estimate") + 
+  ylab("Density") + 
+  geom_vline(aes(xintercept = input_value), linetype = "dashed", linewidth = 1) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+  scale_y_continuous(expand = c(0, 0)) + 
+  theme(strip.text = element_text(size = 14), 
+        strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none", 
+        panel.spacing = unit(6, "mm"))
+
+relative_bias_violin <- phi_mult_bias %>%
+  ggplot(aes(x = as.factor(n_init_sim), y = rel_bias)) +
+  geom_violin(aes(fill = as.factor(n_init_sim)), alpha = 0.85) +
+  facet_wrap(~p_sim, scales = "free_y", axes = "all",
+              labeller = labeller(p_sim = p_sim_labels)) +
+  plot_theme +
+  geom_hline(yintercept = 0, linetype = "dashed", linewith = 1) +
+  ylab("Relative bias") +
+  xlab("Sample size") +
+  scale_fill_viridis(discrete = TRUE) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-1, 1)) +
+  scale_x_discrete(labels = n_sim_labels) +
+  theme(strip.text = element_text(size = 14),
+        strip.background = element_rect(color = "black", fill = "grey90"),
+        legend.position = "none",
+        panel.spacing = unit(6, "mm"))
+
+bias_plot <- phi_mult_summary %>%
+  mutate(n_init_sim = as.factor(n_init_sim)) %>%
+  ggplot(aes(x = as.factor(n_init_sim), y = median_bias)) + 
+  geom_linerange(aes(color = n_init_sim, ymin = q025, ymax = q975), linewidth = 3.5, alpha = 0.25) + 
+  geom_linerange(aes(color = n_init_sim, ymin = q25, ymax = q75), linewidth = 4.5, alpha = 0.65) + 
+  geom_point(aes(fill = n_init_sim), shape = 21, size = 6) + 
+  plot_theme + 
+  theme(strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none") +
+  facet_wrap(~p_sim, labeller = labeller(p_sim = p_sim_labels), ncol = 4) + 
+  scale_fill_viridis(discrete = T) + 
+  scale_color_viridis(discrete = T) + 
+  xlab("Sample size") + 
+  ylab("Bias in survival estimate") + 
+  scale_x_discrete(labels = n_sim_labels) + 
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.5, 0.5)) + 
+  geom_hline(yintercept = 0, linetype = "dashed") 
+
+ci_width_plot <- phi_mult_summary %>%
+  mutate(n_init_sim = as.factor(n_init_sim)) %>%
+  ggplot(aes(x = as.factor(n_init_sim), y = med_ci_width)) + 
+  geom_linerange(aes(color = n_init_sim, ymin = ci_width_q025, ymax = ci_width_975), linewidth = 3.5, alpha = 0.25) + 
+  geom_linerange(aes(color = n_init_sim, ymin = ci_width_q25, ymax = ci_width_q75), linewidth = 4.5, alpha = 0.65) + 
+  geom_point(aes(fill = n_init_sim), shape = 21, size = 6) + 
+  plot_theme + 
+  theme(strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none") +
+  facet_wrap(~p_sim, labeller = labeller(p_sim = p_sim_labels), ncol = 4) + 
+  scale_fill_viridis(discrete = T) + 
+  scale_color_viridis(discrete = T) + 
+  xlab("Sample size") + 
+  ylab("Confidence interval width") + 
+  scale_x_discrete(labels = n_sim_labels) + 
+  scale_y_continuous(expand = c(0, 0)) 
+
+rmse_plot <- phi_mult_summary %>%
+  mutate(n_init_sim = as.factor(n_init_sim)) %>%
+  ggplot(aes(x = as.factor(n_init_sim), y = rmse)) + 
+  #geom_linerange(aes(color = n_init_sim, ymin = ci_width_q025, ymax = ci_width_975), linewidth = 1.5) + 
+  geom_bar(stat = "identity", aes(fill = n_init_sim), color = "black") + 
+  plot_theme + 
+  theme(strip.background = element_rect(color = "black", fill = "grey90"), 
+        legend.position = "none") +
+  facet_wrap(~p_sim, labeller = labeller(p_sim = p_sim_labels), ncol = 4) + 
+  scale_fill_viridis(discrete = T) + 
+  scale_color_viridis(discrete = T) + 
+  xlab("Sample size") + 
+  ylab("RMSE") + 
+  scale_x_discrete(labels = n_sim_labels) + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 0.25)) 
+
+bias_precision_2_panel <- ggarrange(bias_plot + ggtitle("A"), 
+                                ci_width_plot + ggtitle("B"), align = "hv", ncol = 1)
+
+```
+
+```{r make-sim-tables}
+summary_table <- phi_mult_summary %>%
+  left_join(scenario_inputs %>%
+              select(scenario, n_value, p_values), by = "scenario") %>%
+  select(scenario, n_value, p_values, mean_est, median_bias, q25, q75, q025, q975, rmse, med_ci_width) %>%
+  mutate(q25 = round(q25, 3), 
+         q75 = round(q75, 3), 
+         q025 = round(q025, 3), 
+         q975 = round(q975, 3)) %>%
+  unite('50 percentiles', q25:q75, sep = " - ") %>%
+  unite('95 percentiles', q025:q975, sep = " - ") %>%
+  rename(Scenario = scenario, 
+         'Sample size' = n_value, 
+         'Detection probability' = p_values, 
+         'Mean estimate' = mean_est, 
+         'Median bias' = median_bias, 
+         RMSE = rmse, 
+         'Median 95% CI width' = med_ci_width)
+```
+
+```{r compare-models-figs}
+#compare multiple and individual models
+
+phi_model_comparison <- rbind(phi_mult_summary, phi_ind_summary)
+
+bias_comparison_plot <- phi_model_comparison %>%
+  mutate(n_init_sim = as.factor(n_init_sim)) %>%
+  ggplot(aes(x = (n_init_sim), y = median_bias, group = model)) + 
+  geom_linerange(aes(color = model, ymin = q025, ymax = q975), linewidth = 3.5, alpha = 0.25, position = position_dodge(width = 0.4)) + 
+  geom_linerange(aes(color = model, ymin = q25, ymax = q75), linewidth = 5, alpha = 0.5, position = position_dodge(width = 0.4)) + 
+  geom_point(aes(fill = model), shape = 21, size = 5, position = position_dodge(width = 0.4)) + 
+  plot_theme + 
+  theme(strip.background = element_rect(color = "black", fill = "grey90")) +
+  facet_wrap(~p_sim, labeller = labeller(p_sim = p_sim_labels), ncol = 4) + 
+  scale_fill_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+  scale_color_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+  xlab("Sample size") + 
+  ylab("Bias in survival estimate") + 
+  scale_x_discrete(labels = n_sim_labels) + 
+  #scale_y_continuous(expand = c(0, 0), limits = c(-0.5, 0.5)) + 
+  geom_hline(yintercept = 0, linetype = "dashed")
+
+precision_comparison_plot <- phi_model_comparison %>%
+  mutate(n_init_sim = as.factor(n_init_sim)) %>%
+  ggplot(aes(x = (n_init_sim), y = med_ci_width, group = model)) + 
+  geom_linerange(aes(color = model, ymin = ci_width_q025, ymax = ci_width_975), linewidth = 3.5, alpha = 0.25, position = position_dodge(width = 0.4)) + 
+  geom_linerange(aes(color = model, ymin = ci_width_q25, ymax = ci_width_q75), linewidth = 5, alpha = 0.5, position = position_dodge(width = 0.4)) + 
+  geom_point(aes(fill = model), shape = 21, size = 5, position = position_dodge(width = 0.4)) + 
+  plot_theme + 
+  theme(strip.background = element_rect(color = "black", fill = "grey90")) +
+  facet_wrap(~p_sim, labeller = labeller(p_sim = p_sim_labels), ncol = 4) + 
+  scale_fill_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+  scale_color_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+  xlab("Sample size") + 
+  ylab("Confidence interval width") + 
+  scale_x_discrete(labels = n_sim_labels) + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) 
+
+comparison_2_panel <- ggarrange(bias_comparison_plot + ggtitle("A"), 
+          precision_comparison_plot + ggtitle("B"), align = "hv", ncol = 1, common.legend = TRUE)
+
+phi_sim_output_comp <- rbind(phi_mult_bias, phi_ind_bias)
+  
+# ggplot(phi_sim_output_comp, aes(x = phi, group = model)) + 
+#   geom_density(aes(fill = model), alpha = 0.6) + 
+#   facet_grid2(vars(p_sim), vars(n_init_sim), scales = "free_y", axes = "all", 
+#               labeller = labeller(p_sim = p_sim_labels, 
+#                                   n_init_sim = n_sim_labels)) + 
+#   plot_theme + 
+#   xlab("Survival estimate") + 
+#   ylab("Density") + 
+#   geom_vline(aes(xintercept = 0.6), linetype = "dashed", linewidth = 1) + 
+#   scale_fill_viridis(discrete = TRUE) + 
+#   scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) + 
+#   scale_y_continuous(expand = c(0, 0)) + 
+#   theme(strip.text = element_text(size = 14), 
+#         strip.background = element_rect(color = "black", fill = "grey90"),
+#         panel.spacing = unit(6, "mm"))
+```
+
+```{r compare-models}
+#how much did using multiple release group model reduce bias and CI width by scenario?
+
+phi_sim_output_comp %>%
+  select(scenario, iter, interval, release_group, bias, ci_width, model) %>%
+  filter(!is.na(bias)) %>%
+  pivot_wider(id_cols = c(scenario, iter, interval, release_group), 
+              values_from = c(bias, ci_width), names_from = model) %>%
+  mutate(bias_grouped = abs(bias_grouped), 
+         bias_individual = abs(bias_individual), 
+         bias_diff = bias_grouped - bias_individual, 
+         ci_diff = ci_width_grouped - ci_width_individual) %>%
+  group_by(scenario) %>%
+  summarise(mean_bias = median(bias_diff, na.rm = T), 
+            mean_ci = median(ci_diff, na.rm = T))
+```
+
+### Results
+
+Analysis of the simulated datasets using the multiple release group model indicated that the model accurately estimated reach-specific survival probabilities when samples sizes and detection probabilities were sufficiently high. Distributions of survival estimates were centered around the true (simulated) value when detection probabilities for both sites were 0.25 or 0.5, or when 600 fish were tagged per tributary (Figure \@ref(fig:density-plot)). When one detection site had very low detection (p = 0.05) and sample sizes were 150 or 300 tagged fish, survival estimates were not consistently accurate. The median bias in survival estimates was near zero for all scenarios (Table \@ref(tab:tab-1), Figure \@ref(fig:bias-ci-plot)A), indicating that the model did not consistently over- or underestimate survival. In most scenarios, some iterations produced survival estimates that were biased by $\geq$ 0.2, indicating that there is a possibility for bias in survival estimates unless samples sizes and detection probabilities are both consistently high (Figure \@ref(fig:bias-ci-plot)A). However, the the probability of severely biased estimates was reduced as sample sizes and detection probabilities increased, particularly in scenarios that did not include a site with very low (p = 0.05) detection. 
+
+As with accuracy, precision of survival estimates improved with sample size and with detection probability (Figure \@ref(fig:bias-ci-plot)B). The median width of 95% confidence intervals around reach-specific survival estimates was \>0.5 in seven out of the twelve scenarios. Confidence intervals were narrower when detection probability was 0.5 for both detection sites, highlighting the importance of high in-stream detection rates for obtaining precise estimates. 
+
+Using the multiple release group model reduced bias and improved precision in survival estimates for all scenarios. The median bias in survival estimates from the independent model deviated from zero in some scenarios; additionally, the probability of obtaining biased estimates was higher in the independent model for all scenarios (Figure \@ref(fig:comp-plots)A). The width of the 95% confidence intervals around the survival estimates was consistently lower from the multiple release group model than the independent model (Figure \@ref(fig:comp-plots)B). These results suggest that using the multiple release group model is beneficial, particularly with low sample sizes. 
+
+```{r tab-1, echo = F, results = T}
+
+kableExtra::kable(summary_table, 
+                  digits = 3, 
+                  caption = "Estimates of survival probability from the multiple release group M-array CJS model by scenario. Sample size indicates the simulated number of tagged fish per tributary, and detection probability indicates the simulated detection probabilities for detection sites one and two. The mean estimate is the mean estimate of reach-specific survival. Median bias refers to the median difference between the simulated and estimated survival probability, and the 50 and 95 percentiles indicate the percentiles of bias by scenario.", 
+                  align = c('lcccccccr'))
+
+```
+
+```{r density-plot, fig.cap="Density plots showing estimates of reach-specific survival by scenario. Column headers indicate the simulated sample size, and row labels indicate the simulated detection probabilities. The vertical dashed lines indicate the true (simulated) survival probability.", fig.width = 12, fig.height = 10}
+
+bias_density
+```
+
+```{r bias-ci-plot, fig.cap = "(A) The median bias in estimates of reach-specific survival by scenario. (B) The median width of 95% confidence intervals associated with survival estimates by scenario. In both panels, the dark bars indicate 50 percentiles and the light bars indicate 95 percentiles.", fig.width=12, fig.height=10}
+
+bias_precision_2_panel
+```
+
+```{r comp-plots, fig.cap= "(A) The median bias in estimates of reach-specific survival by scenario and model type. (B) The median width of 95% confidence intervals associated with survival estimates by scenario. In both panels, the dark bars indicate 50 percentiles and the light bars indicate 95 percentiles.", fig.width=12, fig.height=10}
+
+comparison_2_panel
+```
+
+
+## Survival estimates for juvenile Chinook salmon
+
+### Methods
+
+Survival was estimated for juvenile sp/sum Chinook salmon tagged in 2025. Chinook salmon parr were tagged with PIT tags in summer and fall of 2025 at nineteen locations in the Snake River Basin. Summer tagging occurred before 1 September 2025; fall tagging occurred on or after 1 September 2025. The number of fish tagged by location and season varied from 14 to 1,499 ( Table \@ref(tab:tab-2)). Fish were subsequently detected at in-stream PIT tag arrays, at Lower Granite Dam, and at sites downstream of Lower Granite Dam in the Snake and Columbia rivers. Detections occurred at fourteen in-stream PIT tag arrays. Detections at the LC1 and LC2 arrays and at the SC1 and SC2 arrays were pooled due to close spatial proximity and are represented by detection sites LC12 and SC12, respectively. Each array detected between 3 and 1,055 tagged juvenile sp/sum Chinook salmon (Table \@ref(tab:tab-3)). Detections at Lower Granite Dam (LGR) included detections in the juvenile bypass system and the spillway. Detections at sites downstream of LGR were pooled (detection site "Down"). Detections occurred from July 2025 to August 2026 (Figure \@ref(fig:emigration-plot)). Visualization of emigration timing was used to assess whether sharing detection probabilities among release groups was appropriate. 
+
+Reach-specific survival and detection probabilities were estimated using the multiple release group model described above. Estimates were produced for all release groups in a single model, with a single detection probability estimated for each detection site. At four sites, fish were tagged in both the summer and the fall. For these sites, fish tagged in different seasons were treated as separate release groups. We also estimated survival and detection probabilities using an independent M-array CJS model for each release group. Using the independent models, survival was not estimated for fish tagged in Bear Creek (BEAR6C) or summer-tagged fish in the American River (AMERR) due to low sample sizes. 
+
+```{r read-estimates, message = F}
+ch <- readRDS("data/parr_tagging/ch_parr_2025.RDS")
+ind_model_output <- readRDS("data/parr_tagging/parr_estimates_2025.RDS")
+obs_tbl <- readRDS("data/parr_tagging_obs_tbl.RDS")
+
+mult_model_output <- readRDS("data/parr_tagging/parr_estimates_multiple_2025.RDS")
+mult_model_output_shared_phi <- readRDS("data/parr_tagging/parr_estimates_multiple_shared_phi_2025.RDS")
+
+```
+
+```{r summary-tbls, result = F, message = F}
+#tables of number of fish by release site and detection sites
+
+estimates <- ind_model_output$estimates
+model_tbl <- ind_model_output$model_tbl
+
+estimates <- estimates %>%
+  mutate(from_site = str_extract(from_site, "^[^_]*")) %>%
+  separate_wider_delim(cols = release_site, 
+                       delim = "_", 
+                       names = c("release_site", "mark_season"))
+
+LGR <- c('GRJ', 'GRS') #s = spillway, #j = juvenile bypass
+Down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
+          "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
+LC12 <- c('LC1', 'LC2')
+SC12 <- c('SC1', 'SC2')
+
+obs_sites <- unique(estimates$from_site)
+release_sites <- unique(ch$release_site)
+
+site_names <- c("Newsome Creek", "Lolo Creek", 
+                "Red River", "American River", 
+                "Hurricane Creek", "Wallowa River", 
+                "Bear Creek", "Summit Creek", 
+                "Grouse Creek", "Johnson Creek", 
+                "Burnt Log Creek", "East Fork South Fork Salmon River", 
+                "Secesh River", "Lake Creek", 
+                "Capehorn Creek", "Crooked River", 
+                "Chamberlin Creek", "Marsh Creek", "South Fork Salmon River")
+
+site_names <- as.data.frame(cbind(release_sites, site_names))
+site_names <- site_names %>%
+  rename(release_site = release_sites)
+
+#group release sites by area
+gri <- c("BEAR6C", "HURRIC", "WALLOR") 
+sf_sal <- c("BURNLC", "GROUSC", "JOHNSC", "LAKEC", "SAEFSF", "SALRSF", "SECESR", "SUMITC")
+mf_sal <- c("CHAMBC", "MARSHC", "CAPEHC")
+wet_clear <- c("LOLOC") 
+dry_clear <- c("NEWSOC", "REDR", "AMERR", "CROOKR")
+
+n_rel_site <- ch %>%
+  select(tag_code, release_site, mark_season) %>%
+  distinct() %>%
+  group_by(release_site, mark_season) %>%
+  count() %>%
+  left_join(site_names, by = "release_site") %>%
+  mutate(mpg = case_when(
+    `release_site` %in% gri  ~ "Grande Ronde/Imnaha",
+    `release_site` %in% sf_sal   ~ "SF Salmon",
+    `release_site` %in% mf_sal ~ "MF Salmon",
+    `release_site` %in% wet_clear    ~ "Wet Clearwater", 
+    `release_site` %in% dry_clear ~ "Dry Clearwater")) %>%
+  rename('Release site' = release_site, 
+         'Tag season' = mark_season,
+         'Number of tagged fish' = n, 
+         'Site name' = site_names) %>%
+  arrange(mpg) %>%
+  relocate('Site name', .after = 'Release site')
+
+#n_rel_site <- cbind(n_rel_site, site_names)
+#n_rel_site <- n_rel_site %>%
+#  rename('Site name' = ...4)
+
+site_by_mpg <- n_rel_site %>%
+  ungroup() %>%
+  select('Release site', mpg) %>%
+  distinct()
+
+grp_site <- rle(as.character(n_rel_site$mpg))
+index_site <- setNames(grp_site$lengths, grp_site$values)
+n_rel_site_tbl <- n_rel_site %>%
+  select(-mpg)
+
+detect_site_key <- obs_tbl %>%
+  mutate(obs_name = map(obs_loc, names)) %>%
+  select(release_site, obs_name) %>%
+  unnest(obs_name) %>%
+  group_by(obs_name) %>%
+  summarise(release_sites = paste(unique(release_site), collapse = ", "),  .groups = "drop") %>%
+  filter(obs_name %in% obs_sites) %>%
+  mutate(release_sites = if_else(obs_name == "LGR", "All", 
+                                 if_else(obs_name == "Down", "All", release_sites))) %>%
+  rename('Detection site' = obs_name)
+
+n_detect_site <- ch %>%
+  mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
+                                         if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  mutate(detection_site = if_else(detection_site %in% LC12, "LC12", 
+                                  if_else(detection_site %in% SC12, "SC12", detection_site))) %>%
+  select(tag_code, detection_site) %>%
+  distinct() %>%
+  group_by(detection_site) %>% 
+  filter(detection_site %in% obs_sites) %>%
+  filter(!(detection_site %in% release_sites)) %>%
+  count() %>%
+  rename('Detection site' = detection_site, 
+         'Number of detected fish' = n) %>%
+  left_join(detect_site_key, by = 'Detection site') %>%
+  rename('Associated release sites' = release_sites)
+
+
+```
+
+
+```{r, include=F, message = F}
+#emigration timing figures
+
+detection_timing <- ch %>%
+  filter(event_type != "Mark") %>% #filter out marking events
+  mutate(detection_site = if_else(obs_site %in% LGR, "LGR", 
+                                         if_else(obs_site %in% Down, "Down", obs_site))) %>%
+  mutate(detection_site = if_else(detection_site %in% LC12, "LC12", 
+                                  if_else(detection_site %in% SC12, "SC12", detection_site))) %>%
+  filter(detection_site %in% obs_sites) %>%
+  filter(!(detection_site %in% release_sites)) %>%
+  select(tag_code, detection_site, first_obs, release_site, mark_season, mark_release_date) %>%
+  arrange(first_obs)
+
+detection_timing <- detection_timing %>%
+  mutate(fish_num = 1) %>%
+  group_by(release_site, detection_site, mark_season) %>%
+  mutate(cumul = cumsum(fish_num), 
+         cum_prop = cumsum(fish_num)/sum(fish_num))
+
+emigration_timing_plot <- detection_timing %>%
+  filter(release_site != "BEAR6C") %>%
+  filter(!(detection_site %in% c("CWR", "Down", "SC2"))) %>%
+  filter(!(detection_site == "ZEN" & release_site == "JOHNSC")) %>% #filter out 1 JC fish that was detected at ZEN
+  ggplot(aes(x = first_obs, y = cum_prop)) + 
+  geom_line(aes(color = release_site, linetype = mark_season), linewidth = 1) +
+  facet_wrap(~detection_site, ncol = 3) + 
+  plot_theme + 
+  theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ylab("Cumulative proportion") + 
+  xlab("Date") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) + 
+  scale_x_date(expand = c(0, 0)) + 
+  labs(color = "Release site") + 
+  scale_linetype_manual(values = c("dashed", "solid"), name = "Tag season")
+
+```
+
+
+```{r tab-2, echo = F, warning = F, results=T}
+#knitr::kable(n_rel_site) #%>%
+  #kable_styling(full_width = TRUE)
+
+kableExtra::kbl(n_rel_site_tbl, 
+                caption = "The number of juvenile sp/sum Chinook salmon tagged by release site and season in 2025. Release sites are grouped by major population group (MPG)." ) %>%
+  #select(-area) %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(index = index_site)
+```
+
+```{r tab-3, echo = F, warning = F, results=T}
+knitr::kable(n_detect_site, 
+             caption = "The number of juvenile sp/sum Chinook salmon detected at instream detection sites during downstream migration. Detections at Down represent detections at all sites downstream of Lower Granite Dam combined. Detections at LC12 represent detections at sites LC1 and LC2 combined, and detections at SC12 represent detections at sites SC1 and SC2 combined. Fish tagged and released at the associated release sites will pass the indicated detection site during downstream migration.") #%>%
+ # kable_styling(full_width = TRUE)
+```
+
+```{r emigration-plot, echo = F, fig.width=12, fig.height=14, fig.cap="Cumulative emigration timing of juvenile sp/sum Chinook salmon during downstream migration at each in-stream array and at Lower Granite Dam. Each color represents a unique release group. Solid lines indicate summer-tagged fish, and dashed lines indicate fall-tagged fish."}
+emigration_timing_plot
+```
+
+
+```{r ind-est-tbl, include = F}
+#tables of survival and detection estimates by release site
+
+survival <- estimates %>%
+  filter(metric == "survival", to_site != "Down")
+
+detection <- estimates %>%
+  filter(metric == "detection") %>%
+  filter(!(is.na(marray_est)))
+
+cumulative <- estimates %>%
+  filter(metric == "cumulative") %>%
+  filter(!is.na(marray_est))
+
+survival_tbl <- survival %>%
+  select(release_site, mark_season, interval, from_site, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'From site' = from_site, 
+         'To site' = to_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI, 
+         'Tag season' = mark_season
+         ) %>%
+  left_join(site_by_mpg, by = "Release site") %>%
+  arrange(mpg)
+
+grp_sur <- rle(as.character(survival_tbl$'Release site'))
+index_sur <- setNames(grp_sur$lengths, grp_sur$values)
+
+mpg_rle   <- rle(survival_tbl$mpg)
+index_mpg <- setNames(mpg_rle$lengths, mpg_rle$values)
+
+survival_tbl <- survival_tbl %>% select(-'Release site')
+
+detection_tbl <- detection %>%
+  select(release_site, mark_season, interval, from_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'Site' = from_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI, 
+         'Tag season' = mark_season
+         ) %>%
+  left_join(site_by_mpg, by = "Release site") %>%
+  arrange(mpg)
+
+grp_det <- rle(as.character(detection_tbl$'Release site'))
+index_det <- setNames(grp_det$lengths, grp_det$values)
+
+detection_tbl <- detection_tbl %>% select(-'Release site')
+
+cumulative_tbl <- cumulative %>%
+  select(release_site, mark_season, interval, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  mutate(marray_est = round(marray_est, 3),
+         marray_lcl = round(marray_lcl, 3), 
+         marray_ucl = round(marray_ucl, 3)) %>%
+  unite("CI", marray_lcl:marray_ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'To site' = to_site, 
+         Estimate = marray_est, 
+         '95% CI' = CI, 
+         'Tag season' = mark_season
+         ) %>%
+  left_join(site_by_mpg, by = "Release site") %>%
+  arrange(mpg)
+
+grp_cumulative <- rle(as.character(cumulative_tbl$'Release site'))
+index_cumulative <- setNames(grp_cumulative$lengths, grp_cumulative$values)
+
+cumulative_tbl <- cumulative_tbl %>% select(-'Release site')
+
+```
+
+
+```{r grp-est-tbl}
+survival_mult <- mult_model_output$phi %>%
+  separate_wider_delim(cols = release_group, 
+                       delim = "_", 
+                       names = c("release_site", "mark_season")) 
+
+survival_mult_tbl <- survival_mult %>%
+  mutate(phi = round(phi, 3),
+         lcl = round(lcl, 3), 
+         ucl = round(ucl, 3)) %>%
+  unite("CI", lcl:ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'From site' = from_site,
+         'To site' = to_site, 
+         Estimate = phi, 
+         '95% CI' = CI, 
+         'Tag season' = mark_season
+         ) %>%
+  left_join(site_by_mpg, by = 'Release site') %>%
+  relocate(Interval, .before = 'From site') %>%
+  arrange(mpg, 'Release site')
+
+grp_sur_mult <- rle(as.character(survival_mult_tbl$'Release site'))
+index_sur_mult <- setNames(grp_sur_mult$lengths, grp_sur_mult$values)
+
+mpg_rle   <- rle(survival_mult_tbl$mpg)
+index_mpg <- setNames(mpg_rle$lengths, mpg_rle$values)
+
+
+#detection
+detection_mult <- mult_model_output$p
+
+detection_mult_tbl <- detection_mult %>%
+  select(-release_group) %>%
+  relocate(site, .before = p) %>%
+  mutate(p = round(p, 3), 
+         lcl = round(lcl, 3), 
+         ucl = round(ucl, 3)) %>%
+  unite("CI", lcl:ucl, sep = " - ") %>%
+  rename(Site = site, 
+         Estimate = p, 
+         '95% CI' = CI)
+  
+#cumulative
+cumulative_mult <- mult_model_output$cum_phi %>%
+  separate_wider_delim(cols = release_group, 
+                       delim = "_", 
+                       names = c("release_site", "mark_season")) 
+
+cumulative_mult_tbl <- cumulative_mult %>%
+  mutate(estimate = round(estimate, 3), 
+         lcl = round(lcl, 3), 
+         ucl = round(ucl, 3)) %>%
+  unite("CI", lcl:ucl, sep = " - ") %>%
+  rename('Release site' = release_site, 
+         Interval = interval, 
+         'From site' = from_site,
+         'To site' = to_site, 
+         Estimate = estimate, 
+         '95% CI' = CI, 
+         'Tag season' = mark_season
+         ) %>%
+  left_join(site_by_mpg, by = 'Release site') %>%
+  relocate(Estimate, .after = 'To site') %>% 
+  relocate('95% CI', .after = Estimate) %>%
+  arrange(mpg)
+
+grp_cum_mult <- rle(as.character(cumulative_mult_tbl$'Release site'))
+index_cum_mult <- setNames(grp_cum_mult$lengths, grp_cum_mult$values)
+
+mpg_rle_cum   <- rle(cumulative_mult_tbl$mpg)
+index_cum_mpg <- setNames(mpg_rle$lengths, mpg_rle_cum$values)
+```
+
+
+```{r surv-figs}
+surv_plot <- survival %>%
+    #filter(release_site %in% site_subset) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    #mutate(release_site = fct_reorder(release_site))
+    ggplot(aes(x = int_label, y = marray_est)) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 3) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis", name = "MPG") +
+    scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Survival") + 
+    xlab(" ")
+
+surv_plot_mult <- survival_mult %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    #mutate(release_site = fct_reorder(release_site))
+    ggplot(aes(x = int_label, y = phi)) + 
+    geom_errorbar(aes(ymin = lcl, ymax = ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 4) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis", name = "MPG") +
+    scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Survival") + 
+    xlab(" ")
+
+
+cum_plot_mult <- cumulative_mult %>%
+    #unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(to_site = fct_reorder(to_site, interval)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    #mutate(release_site = fct_reorder(release_site))
+    ggplot(aes(x = to_site, y = estimate)) + 
+    geom_errorbar(aes(ymin = lcl, ymax = ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 4) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis", name = "MPG") +
+    scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Cumulative survival") + 
+    xlab(" ")
+
+#comparison plot 
+
+survival_ind <- survival %>%
+  select(release_site, mark_season, interval, from_site, to_site, marray_est, marray_lcl, marray_ucl) %>%
+  rename(phi = marray_est, lcl = marray_lcl, ucl = marray_ucl) %>%
+  mutate(model = "independent")
+
+survival_mult <- survival_mult %>%
+  mutate(model = "grouped")
+
+survival_comp <- rbind(survival_ind, survival_mult)
+
+surv_plot_comp <- survival_comp %>%
+  unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+  mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    #mutate(release_site = fct_reorder(release_site))
+    ggplot(aes(x = int_label, y = phi, group = model)) + 
+    geom_errorbar(aes(ymin = lcl, ymax = ucl, color = model, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = model, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 4) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_fill_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+    scale_color_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Survival") + 
+    xlab(" ")
+
+```
+
+
+```{r det-figs}
+
+#detection figures
+detection_plot <- detection %>%
+    mutate(site = reorder_within(from_site, interval, release_site)) %>%
+    left_join(site_by_mpg %>% rename(release_site = 'Release site'), 
+              by = "release_site") %>%
+    arrange(mpg) %>%
+    ggplot(aes(x = (site), y = marray_est)) + 
+    geom_errorbar(aes(ymin = marray_lcl, ymax = marray_ucl, color = mpg, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = mpg, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap(~fct_inorder(release_site), scales = "free_x", ncol = 3) +
+    scale_x_reordered() +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis", name = "MPG") +
+    scale_fill_viridis_d(option = "viridis", name = "MPG") +
+    scale_shape_manual(values = c(22, 21), name = "Tag season") +
+    scale_linetype_manual(values = c(1, 1), name = "Tag season") +
+    guides(fill = guide_legend(override.aes = list(shape = 21))) +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Detection probability") + 
+    xlab("Site")
+
+detection_plot_mult <- detection_mult %>%
+  ggplot(aes(x = site, y = p)) + 
+  geom_errorbar(aes(ymin = lcl, ymax = ucl), width = 0.1, linewidth = 1) + 
+  geom_point(size = 4) + 
+  plot_theme + 
+  xlab("Site") + 
+  ylab("Detection probability") + 
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0))
+
+#compare models 
+
+detection_ind <- detection %>%
+  select(release_site, mark_season, from_site, marray_est, marray_lcl, marray_ucl) %>%
+  rename(site = from_site, p = marray_est, lcl = marray_lcl, ucl = marray_ucl) %>%
+  mutate(model = "independent")
+
+detection_mult <- detection_mult %>%
+  mutate(mark_season = NA, 
+         model = "grouped") %>%
+  rename(release_site = release_group)
+
+detection_comp <- rbind(detection_ind, detection_mult)
+detection_comp <- detection_comp %>% 
+  mutate(release_site = if_else(model == "grouped", "multiple", release_site))
+
+detection_comp_plot <- detection_comp %>%
+  #filter(site != "LGR") %>%
+  ggplot(aes(x = release_site, y = p, group = release_site)) + 
+  geom_errorbar(aes(ymin = lcl, ymax = ucl, color = model), position = position_dodge(width = 0.4), width = 0.1) + 
+  geom_point(size = 4, shape = 21, aes(fill = model), position = position_dodge(width = 0.4)) + 
+  plot_theme + 
+  ylab("Detection probability") + 
+  xlab("Site") + 
+  facet_wrap(~site, scales = "free_x") +
+  scale_y_continuous(limits = c(0, 1)) + 
+  scale_fill_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) + 
+  scale_color_manual(values = c("#35b779", "#31688e"), name = "Model", labels = c("Multiple", "Independent")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9), 
+        legend.position = "top", 
+        strip.background = element_rect(fill = "grey", color = "black")
+        )
+
+```
+
+
+### Results
+
+Reach-specific estimates of survival for sp/sum Chinook parr were variable, and many estimates had broad confidence intervals (i.e., 95% CI 0 - 1, Figure \@ref(fig:surv-plot), Table \@ref(tab:tab-4)). When fish were tagged in the summer and fall at a single site, estimates of survival were typically similar for fish tagged in both seasons (e.g., NEWSOC, REDR, LOLOC). Estimates of detection probability varied from 0.015 (95% CI 0.005 - 0.049) for WR1 to 0.96 (95% CI 0.854 - 0.99) for CRA (Figure \@ref(fig:det-plot), Table \@ref(tab:tab-5)). The estimate of cumulative survival to Lower Granite Dam  was highest for fish tagged in the East Fork South Fork Salmon River (SAEFSF), with an estimate of 0.242 (95% CI 0 - 0.667). The mean estimate of cumulative survival to Lower Granite Dam was 0.129 (Table \@ref(tab:tab-6), Figure \@ref(fig:cum-plot)), which is within the range reported in previous research [@lamb2026]. Release groups with low sample sizes tended to have lower precision of reach-specific survival estimates. For example, Burnt Log Creek, Grouse Creek, and Summit Creek had sample sizes of 52, 168, and 174 tagged fish, respectively; each of these release groups had imprecise survival estimates. In addition to low sample sizes, low detection probabilities at some in-stream arrays, such as SC12 and WR1, likely reduced the precision associated with reach-specific survival estimates. Despite sample sizes $\geq$ 200, survival estimates for release groups in the Wet Clearwater MPG had low precision for downstream reaches, which was likely influenced by the low detection rate of the SC12 array ($\hat{p}$ = 0.088 (95% CI 0.047 - 0.158)). 
+
+Using the multiple release group model improved the precision of survival estimates for most release groups and and reaches (Figure \@ref(fig:surv-comp)). In particular, estimates for fish tagged in Hurricane Creek (HURRIC), Grouse Creek (GROUSC), and Johnson Creek (JOHNSC) were improved when using the multiple release group model as compared to the independent models. For most estimates, using the multiple release group model provided a modest improvement in precision; however, some estimates from the multiple release group model were less precise than from independent models (e.g., the first intervals for BURNLC and SAEFSF). Estimates of detection probability were similar for both models for most detection sites (Figure \@ref(fig:det-comp)). Estimates of detection probability at Lower Granite Dam showed high variability among the independent models, and the estimate produced by the multiple release group model was similar to the median of the independent estimates (median = 0.200, multiple release group estimate = 0.241). 
+
+
+```{r tab-4, echo = F, warning = F, results=T}
+survival_mult_tbl %>%
+  select(-mpg, -'Release site') %>%
+  kbl(align = "c", 
+      caption = "Reach-specific estimates of survival for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam.") %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(
+    index = index_mpg,                                   # outer: area headings
+    label_row_css = "text-align:center; font-weight:bold; background-color:#e9e9e9;",
+    latex_align = "c"                                     # for PDF output
+  ) %>%
+  pack_rows(index = index_sur_mult)                        # inner: release site groups
+
+
+```
+
+
+```{r, tab-5, results = T}
+knitr::kable(detection_mult_tbl, 
+             caption = "Estimates of detection probability for juvenile sp/sum Chinook salmon at in-stream PIT tag arrays and Lower Granite Dam (LGR) during downstream migration.", 
+             align = c("lcc"))
+```
+
+
+```{r, tab-6, results = T}
+cumulative_mult_tbl %>%
+  select(-mpg, -'Release site') %>%
+  kbl(align = "c", 
+      caption = "Estimates of cumulative survival for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam.") %>%
+  kable_styling(full_width = TRUE) %>%
+  pack_rows(
+    index = index_cum_mpg,                                   # outer: area headings
+    label_row_css = "text-align:center; font-weight:bold; background-color:#e9e9e9;",
+    latex_align = "c"                                     # for PDF output
+  ) %>%
+  pack_rows(index = index_cum_mult)                        # inner: release site groups
+```
+
+
+```{r surv-plot, fig.width=15, fig.height=20, fig.cap="Reach-specific survival estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam. Estimates were produced using multiple release group model; error bars indicate 95% confidence intervals. The color indicates the major population group."}
+surv_plot_mult
+```
+
+```{r det-plot, fig.width=12, fig.height=5, fig.cap="Detection probability estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam by reach. Estimates were produced using the multiple release group model; error bars indicate 95% confidence intervals."}
+detection_plot_mult
+```
+
+```{r cum-plot, fig.width = 15, fig.height = 20, fig.cap="Estimates of cumulative survival for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam. Estimates were produced using the multiple release group model; error bars indicate 95% confidence intervals. The color indicates the major population group."}
+
+cum_plot_mult
+```
+
+
+```{r surv-comp, fig.width=15, fig.height=20, fig.cap="Reach-specific survival estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam. Estimates were produced using two model formulations. The multiple model is a single model that estimates unique survival and shared detection parameters for release groups. In the independent models, a separate CJS model was fit for each release group. Error bars indicate 95% confidence intervals."}
+surv_plot_comp
+
+```
+
+```{r det-comp, fig.width=15, fig.height=15, fig.cap="Detection probability estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam by reach. Estimates were produced using two model formulations. The multiple model is a single model that estimates unique survival and shared detection parameters for release groups, resulting in a single estimate of detection probability for each site (multiple release group model). In the independent models, a separate CJS model was fit to each release group. Error bars indicate 95% confidence intervals."}
+detection_comp_plot
+```
+
+## Discussion
+
+Simulations showed that the multiple release group model accurately estimated survival, with no consistent over- or underestimation. However, low sample sizes and low detection probability reduced precision and increased the probability of bias in survival estimates. Simulations confirmed that a target sample size of 300 tagged fish per tributary is generally adequate for estimating survival. However, sites with very low detection probability can still be problematic when 300 fish are tagged per tributary. Given the challenges associated with increasing detection rates for in-stream PIT tag arrays, imprecision in survival estimates may be a limitation associated with estimating survival of juvenile Chinook salmon during downstream migration. However, simulation results suggest that when possible, increasing sample sizes may be an effective way to mitigate for arrays with low detection probability.  
+
+Estimates of survival for sp/sum Chinook salmon tagged as parr in 2025 aligned with simulation results. Survival estimates were typically imprecise for release groups with low samples sizes, and low detection probability at in-stream arrays also reduced precision. The target sample size was a minimum of 300 tagged fish per site, and the results suggest that reaching the target sample size in all tributaries will improve survival estimates. In future years, sample sizes may also be increased in some tributaries to improve estimates that are limited by in-stream arrays with low detection probabilities. The identification of arrays with low detection probability, such as SC12 and WR1, will be useful for planning future sampling efforts. 
+
+Simulation results and analysis of the 2025 parr tagging data suggest that using the multiple release group model improved estimates of survival for juvenile sp/sum Chinook during downstream migration. Using the multiple release group model consistently improved the precision of survival estimates when compared to independent models. Additionally, using the multiple release group model allowed us to estimate survival for Bear Creek (BEAR6C) and summer-tagged fish in the American River (AMERR), which could not be estimated using the independent modeling approach due to low sample sizes. Use of the multiple release group model requires evaluating the assumption that detection probabilities are the same among release groups. We used emigration timing to assess this assumption; consistent emigration timing among release groups suggests that all release groups likely experienced similar environmental conditions when passing detection sites. However, it is important to critically evaluate the shared detection assumption when using the multiple release group modeling approach. 
+
+The survival model presented here provides a new approach for estimating survival for juvenile salmon during downstream migration. The method provides flexibility to share parameters among release groups, which is particularly applicable for detection probabilities. Sharing parameters among release groups can improve precision and accuracy of survival estimates. The results of the simulations and analysis of 2025 data will be useful to guide future sampling efforts, including identifying target sample sizes. As data collection continues, this work will allow us to evaluate juvenile survival at greater spatial resolution across the landscape and will be used to identify future conservation actions to improve juvenile salmon survival during outmigration. 
+
+## References

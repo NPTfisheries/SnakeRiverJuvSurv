@@ -46,6 +46,10 @@ mark_df <- map_df(mark_groups$mark_file,
 
 #separate groups by when they were tagged, using Aug 31 as cutoff between fall and summer tagging
 mark_df <- mark_df %>%
+  #filter out spring tagging in Catherine Creek
+  filter(event_date > '2025-07-01') %>%
+  #and filter out winter tagging in Catherine Creek
+  filter(event_date < '2025-12-01') %>%
   mutate(mark_season = if_else(event_date > '2025-08-31', "Fall", "Summer"))
 
 ggplot(mark_df, aes(x = event_date)) + 
@@ -80,7 +84,15 @@ mark_site <- c('BURNLC',
                'AMERR', 
                'CROOKR', 
                'NEWSOC', 
-               'REDR')
+               'REDR', 
+               'CATCNF',
+               'CATCSF',
+               'CATHEC',
+               'GRAND2',
+               'IMNAHR',
+               'LOSTIR',
+               'MINAMR'
+               )
 
 # list of tag_ids to use as marks
 tag_ids <- mark_df %>%
@@ -173,29 +185,70 @@ down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
           "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
 SC12 <- c('SC1', 'SC2') #pool detections at SC1 and SC2
 LC12 <- c('LC1', 'LC2') #pool detections at LC1 and LC2
+IR12 <- c('IR1', 'IR2')
 
 obs_tbl <- tibble(
-  release_site = c('BURNLC', 
-                   'GROUSC', 
-                   'JOHNSC', 
-                   'SAEFSF', 
-                   'SUMITC', 
+  release_site = c('AMERR', 
+                   'BEAR6C',
+                   'BEARVC',
+                   'BIG2C',
+                   'BURNLC',
                    'CAPEHC', 
+                   'CATCNF', 
+                   'CATCSF',
+                   'CATHEC',
                    'CHAMBC', 
-                   'LAKEC', 
+                   'CROOKR', 
+                   'ELKC',
+                   'GRAND2',
+                   'GROUSC', 
+                   'HURRIC', 
+                   'IMNAHR',
+                   'JOHNSC', 
+                   'KNOXB',
+                   'LAKEC',  
+                   'LOLOC',
+                   'LOONC',
+                   'LOSTIR',
                    'MARSHC', 
+                   'MINAMR',
+                   'NEWSOC', 
+                   'REDR',
+                   'SAEFSF', 
                    'SALRSF', 
                    'SECESR',
-                   'BEAR6C', 
-                   'HURRIC', 
-                   'WALLOR', 
-                   'LOLOC',
-                   'AMERR', 
-                   'CROOKR', 
-                   'NEWSOC', 
-                   'REDR'
-                   ),
+                   'SUMITC', 
+                   'VALEYC',
+                   'WALLOR' 
+  ),
   obs_loc = list(
+    list(
+      AMERR = "AMERR", 
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12, 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      BEAR6C = "BEAR6C",
+      WR2 = "WR2", 
+      WR1 = "WR1", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      BEARVC = "BEARVC", 
+      BRC = "BRC",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      BIG2C = "BIG2C", 
+      TAY = "TAY", 
+      LGR = lgr,
+      Down = down
+    ),
     list(
       BURNLC = "BURNLC",
       ESS = "ESS",
@@ -204,12 +257,76 @@ obs_tbl <- tibble(
       Down = down
     ), 
     list(
+      CAPEHC = "CAPEHC",
+      MAR = "MAR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATCNF = "CATCNF",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATCSF = "CATCSF",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATHEC = "CATHEC",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CHAMBC = "CHAMBC",
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      CROOKR = "CROOKR",
+      CRA = "CRA",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      ELKC = "ELKC",
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      GRAND2 = "GRAND2",
+      UGS = "UGS", 
+      UGR = "UGR", 
+      LGR = lgr,
+      Down = down
+    ),
+    list(
       GROUSC = "GROUSC",
       ZEN = "ZEN", 
       SFG = "SFG", 
       LGR = lgr, 
       Down = down
     ), 
+    list(
+      HURRIC = "HURRIC", 
+      WR2 = "WR2", 
+      WR1 = "WR1", 
+      LGR = lgr, 
+      Down = down
+    ),  
+    list(
+      IMNAHR = "IMNAHR",
+      IR3 = "IR3",
+      IR12 = IR12, 
+      LGR = lgr,
+      Down = down
+    ),
     list(
       JOHNSC = "JOHNSC",
       ESS = "ESS", 
@@ -218,30 +335,12 @@ obs_tbl <- tibble(
       Down = down
     ), 
     list(
-      SAEFSF = "SAEFSF",
-      ESS = "ESS", 
+      KNOXB = "KNOXB", 
+      KRS = "KRS", 
       SFG = "SFG", 
       LGR = lgr, 
       Down = down
-    ), 
-    list(
-      SUMITC = "SUMITC",
-      ZEN = "ZEN", 
-      SFG = "SFG", 
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      CAPEHC = "CAPEHC",
-      MAR = "MAR", 
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      CHAMBC = "CHAMBC",
-      LGR = lgr, 
-      Down = down
-    ), 
+    ),
     list(
       LAKEC = "LAKEC",
       ZEN = "ZEN", 
@@ -250,8 +349,56 @@ obs_tbl <- tibble(
       Down = down
     ), 
     list(
+      LOLOC = "LOLOC", 
+      LC12 = LC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      LOONC = "LOONC", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      LOSTIR = "LOSTIR",
+      WR2 = "WR2",
+      WR1 = "WR1",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
       MARSHC = "MARSHC",
       MAR = "MAR", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      MINAMR = "MINAMR",
+      MR1 = "MR1",
+      WR1 = "WR1",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      NEWSOC = "NEWSOC",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      REDR = "REDR",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      SAEFSF = "SAEFSF",
+      ESS = "ESS", 
+      SFG = "SFG", 
       LGR = lgr, 
       Down = down
     ), 
@@ -270,67 +417,28 @@ obs_tbl <- tibble(
       Down = down
     ), 
     list(
-      BEAR6C = "BEAR6C",
-      WR2 = "WR2", 
-      WR1 = "WR1", 
+      SUMITC = "SUMITC",
+      ZEN = "ZEN", 
+      SFG = "SFG", 
       LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      VALEYC = "VALEYC",
+      VC2 = "VC2",
+      LGR = lgr,
       Down = down
     ),
-    list(
-      HURRIC = "HURRIC", 
-      WR2 = "WR2", 
-      WR1 = "WR1", 
-      LGR = lgr, 
-      Down = down
-    ),  
     list(
       WALLOR = "WALLOR", 
       WR2 = "WR2", 
       WR1 = "WR1", 
       LGR = lgr, 
       Down = down
-    ), 
-    list(
-      LOLOC = "LOLOC", 
-      LC12 = LC12,
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      AMERR = "AMERR", 
-      SC4 = "SC4",
-      SC3 = "SC3", 
-      SC12 = SC12, 
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      CROOKR = "CROOKR",
-      CRA = "CRA",
-      SC4 = "SC4",
-      SC3 = "SC3", 
-      SC12 = SC12,
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      NEWSOC = "NEWSOC",
-      SC4 = "SC4",
-      SC3 = "SC3", 
-      SC12 = SC12,
-      LGR = lgr, 
-      Down = down
-    ), 
-    list(
-      REDR = "REDR",
-      SC4 = "SC4",
-      SC3 = "SC3", 
-      SC12 = SC12,
-      LGR = lgr, 
-      Down = down
-    ) 
+    )
   )
 )
+
 
 ch_long_list <- ch_long %>%
   group_by(srr, release_site, release_season, mark_season) %>%
@@ -347,8 +455,8 @@ parr_estimates <- run_cjs_model_set(ch_long_list)
 
 parr_survival_tbl <- parr_estimates$model_tbl
 
-saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025.RDS")
-saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025.RDS")
+saveRDS(ch_long, file = "data/parr_tagging/ch_parr_2025_OGR.RDS")
+saveRDS(parr_estimates, file = "data/parr_tagging/parr_estimates_2025_OGR.RDS")
 saveRDS(obs_tbl, file = "data/parr_tagging_obs_tbl.RDS")
 
 
@@ -401,7 +509,7 @@ shared_phi <- list(list(groups = c("NEWSOC_Summer", "NEWSOC_Fall"), interval = c
 
 fit_multiple_shared_phi <- fit_marray_cjs_multiple(marray_list, shared_p, shared_phi = shared_phi_seasonal)
 
-saveRDS(fit_multiple, file = "data/parr_tagging/parr_estimates_multiple_2025.RDS")
+saveRDS(fit_multiple, file = "data/parr_tagging/parr_estimates_multiple_2025_OGR.RDS")
 saveRDS(fit_multiple_shared_phi, file = "data/parr_tagging/parr_estimates_multiple_shared_phi_2025.RDS")
 
 

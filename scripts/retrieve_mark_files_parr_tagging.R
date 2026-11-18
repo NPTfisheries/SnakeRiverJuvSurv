@@ -91,6 +91,8 @@ mig_yr = 2026
 
 mrr_dat_ls <- readRDS(paste0('./data/output/mrr_files/npt_mrr_files_',gsub(', ',"_",toString(tag_yr)),'.rds'))
 
+mrr_dat_ls <- readRDS("./data/output/mrr_files/GAA_OGR_mrr_files_2025_2024_2023_2022_2021.rds")
+
 # check for count/tally fields in PDV fields
 pdv_map <- mrr_dat_ls$pdv_map
 tally_fields <- pdv_map[which(grepl('count|tally|tallied|nfish|n_fish|number', tolower(pdv_map$definition))),]
@@ -197,9 +199,10 @@ events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_ty
 
 #tag year 2025
 #grouped by release site
-#filter for wild sp/sum Chinook
+#filter for wild sp/sum Chinook and steelhead
  save_event_groups(
-   events = events_parr %>% filter(species_run_rear_type %in% c("12W", "11W")),
+   events = events_parr %>% filter(species_run_rear_type %in% c("12W", "11W", "32W"), 
+                                   event_year == "2025"),
    event_type_value = "Mark",
    group_cols = c("event_year", "mrr_project", "release_site"),
    save_TagIds = TRUE,
@@ -227,8 +230,10 @@ events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_ty
    'GAA', #NOAA
    'PJC', #NE OR
    'SCS', #OFO
-   'BDA'  #OFO
- ) 
+   'BDA', #OFO
+   'OGR'  #ODFW
+ 
+   ) 
  
  proj_years <- expand.grid('mrr_project' = proj_codes,
                            'year' = tag_yr,
@@ -271,10 +276,6 @@ events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_ty
                                    map_pdvs = FALSE)
  
  saveRDS(mrr_dat_ls, file = paste0('./data/output/mrr_files/npt_mrr_files_',gsub(', ',"_",toString(tag_yr)),'.rds'))
- 
- View(mrr_dat_ls$sessions)
- View(mrr_dat_ls$events)
- View(mrr_dat_ls$pdv_map)
  
  tag_yr = 2026
  #mig_yr = 2026
@@ -376,8 +377,7 @@ events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_ty
  max(events_parr$event_date)
  min(events_parr$event_date)
  
- #no tags after 8/31/2026 in PTAGIS yet
- events_parr %>% filter(event_date > "2026-08-31") %>% group_by(species_run_rear_type) %>% count() 
+ #events_parr %>% filter(event_date > "2026-08-31") %>% group_by(species_run_rear_type) %>% count() 
  
  # Subset events to 'Mark' only, save output, and create tag id txt file for
  # PTAGIS upload.  You could iterate across the event_type_value to create
@@ -385,15 +385,13 @@ events_parr %>% filter(event_date > "2025-08-31") %>% filter(species_run_rear_ty
  
  #tag year 2026
  #grouped by release site
- #filter for wild sp/sum Chinook
+ #filter for wild sp/sum Chinook and steelhead
  save_event_groups(
-   events = events_parr %>% filter(species_run_rear_type %in% c("12W", "11W")),
+   events = events_parr %>% filter(species_run_rear_type %in% c("12W", "11W", "32W")),
    event_type_value = "Mark",
    group_cols = c("event_year", "mrr_project", "release_site"),
    save_TagIds = TRUE,
    out_dir = paste0("./output/events_parr/tag_yr",tag_yr)
  )
  
-#use to summarize number of sp/sum Chinook tagged by location in 2026
- events_parr %>%
-   filter()
+#use to summarize number of sp/sum Chinook and steelhead tagged by location in 2026

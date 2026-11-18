@@ -660,6 +660,8 @@ parr_estimates_long %>%
 
 #### 2026 tagging
 
+#Create table - number of fish tagged in 2025 and 2026 by site
+
 #summarise number of fish tagged by site in 2026
 
 activity <- 'parr' # used for directory path and hatchery, rst
@@ -678,12 +680,45 @@ no_cth <- file_df %>% filter(!cth_exists)
 
 # Need to map across all the groups contained in mark_groups
 
+mark_df <- map_df(file_df$mark_file,
+                  ~readRDS(file.path(file_path, .))
+)
+
+activity <- 'parr' # used for directory path and hatchery, rst
+tag_yr = 2025
+
+
+# check for mark groups and if interrogation files exist (requires two specific file names "....Mark.rds" and "....INT.rds")
+
+#CTH files are manually downloaded from PTAGIS
+
+file_df <- check_mark_groups_tag_yr(activity = activity, tag_year = 2025)
+
+mark_groups <- file_df %>% filter(cth_exists)
+
+no_cth <- file_df %>% filter(!cth_exists)
+
+# Need to map across all the groups contained in mark_groups
+
 mark_df <- map_df(no_cth$mark_file,
                   ~readRDS(file.path(file_path, .))
 )
 
+
+mark_2025 <- mark_df %>%
+  filter(species_run_rear_type %in% c("11W", "12W", "32W"), #sp/sum chinook
+         #release_site %in% mark_site, #look at what we're filtering here
+         !grepl('Y', text_comments), 
+         !grepl('Y|M', conditional_comments)) #I think this is removing yearlings and mortalities
+
+table(mark_2025$event_type)
+table(mark_2025$capture_method)
+table(mark_2025$event_season)
+table(mark_2025$species_run_rear_type)
+table(mark_2025$release_site)
+
 mark_2026 <- mark_df %>%
-  filter(species_run_rear_type %in% c("11W", "12W"), #sp/sum chinook
+  filter(species_run_rear_type %in% c("11W", "12W", "32W"), #sp/sum chinook
          #release_site %in% mark_site, #look at what we're filtering here
          !grepl('Y', text_comments), 
          !grepl('Y|M', conditional_comments)) #I think this is removing yearlings and mortalities
@@ -693,3 +728,52 @@ table(mark_2026$capture_method)
 table(mark_2026$event_season)
 table(mark_2026$species_run_rear_type)
 table(mark_2026$release_site)
+
+head(mark_2026)
+
+ggplot(mark_2026, aes(x = event_date)) + 
+  geom_histogram() + 
+  facet_wrap(~release_site, scale = "free_y")
+
+mark_2026 %>% 
+  filter(event_date > '2026-04-01') %>%
+  ggplot(aes(x = event_date)) + 
+  geom_histogram() + 
+  facet_wrap(~release_site, scale = "free_y")
+
+
+ggplot(mark_2025, aes(x = event_date)) + 
+  geom_histogram() + 
+  facet_wrap(~release_site, scale = "free_y")
+
+mark_2025 %>% 
+  filter(event_date > '2025-04-01') %>%
+  #and filter out winter tagging in Catherine Creek
+  filter(event_date < '2025-12-01') %>%
+  ggplot(aes(x = event_date)) + 
+  geom_histogram() + 
+  facet_wrap(~release_site, scale = "free_y")
+
+
+mark_2025 <- mark_2025 %>%
+  filter(event_date > '2025-04-01') %>%
+  filter(event_date < '2025-12-01') %>%
+  select(mrr_project, event_year, event_date, species_run_rear_type, release_site, tag_code)
+
+mark_2026 <- mark_2026 %>%
+  filter(event_date > '2026-04-01') %>%
+  select(mrr_project, event_year, event_date, species_run_rear_type, release_site, tag_code)
+
+mark_2025_2026 <- rbind(mark_2025, mark_2026)
+
+tag_by_site_2025_2026 <- mark_2025_2026 %>%
+  #mutate(mark_season = if_else(event_date > '2026-08-31', "Fall", "Summer")) %>%
+  select(species_run_rear_type, release_site, tag_code, mrr_project, event_year) %>%
+  distinct() %>%
+  mutate(species = if_else(species_run_rear_type %in% c("12W", "11W"), "sp/sum Chinook", "Steelhead")) %>%
+  group_by(species, release_site, mrr_project, event_year) %>%
+  count() %>% 
+  pivot_wider(names_from = c(species, event_year), values_from = n) %>%
+  arrange(release_site)
+
+write.csv(tag_by_site_2025_2026, file = "output/events_parr/tag_yr2026/tag_by_site_2025_2026.csv")  

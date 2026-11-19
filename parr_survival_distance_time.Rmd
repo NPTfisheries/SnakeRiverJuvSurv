@@ -1,0 +1,1300 @@
+---
+title: "Comparison of juvenile survival estimates for juvenile spring/summer Chinook salmon"
+author:
+
+- Michelle A. Briggs:
+    email: michelleb@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+- Ryan N. Kinzer:
+    email: ryank@nezperce.org
+    institute: npt_mccall
+    correspondence: yes
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  bookdown::html_document2:
+    theme: cerulean
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    number_sections: yes
+    #css: "../templates/styles.css"
+    pandoc_args:
+     - "--lua-filter=templates/scholarly-metadata.lua"
+     - "--lua-filter=templates/author-info-blocks.lua"
+     - "--lua-filter=templates/pagebreak.lua"
+  # bookdown::word_document2:
+  #   toc: yes
+  #   toc_depth: 4
+  #   reference_docx: "../templates/Word_template_draft.docx"
+institute:
+- npt_mccall: Nez Perce Tribe, Department of Fisheries Resources Management, 14054 Burr Dr., McCall, Idaho, 83638, USA
+csl: "templates/american-fisheries-society.csl"
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+bibliography: references.bib
+---
+
+<!-- the following inserts the NPT logo into header and sets a watermark -->
+```{=html}
+<!-- <script> -->
+<!--    $(document).ready(function() { -->
+<!--      $head = $('#header'); -->
+<!--      $head.prepend('<img src=\"NPT.png\" style=\"float: right;width: 150px;\"/>') -->
+<!--      $head.prepend('<img src=\"DFRM.png\" style=\"float: right;width: 150px;\"/>') -->
+<!--    }); -->
+<!-- </script> -->
+ 
+<!-- <style> -->
+<!-- p.caption { -->
+<!--   font-size: 100%; -->
+<!-- } -->
+<!-- </style> -->
+ 
+ 
+<img src="templates/NPT.png" style="position:absolute;top:75px;right:0px;width: 125px;" />
+<img src="templates/DFRM.png" style="position:absolute;top:75px;right:-150px;width: 125px;" />
+<div class="watermark">DRAFT</div>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+```{r, include = FALSE}
+
+#remotes::install_github("ryankinzer/PITmodelR", ref = "dev", build_vignettes = F, force = T)
+#remotes::install_github("KevinSee/PITcleanr", build_vignettes = TRUE)
+#devtools::install_github("yutannihilation/ggsflabel")
+
+library(PITmodelR)
+library(PITcleanr)
+library(tidyverse)
+library(RTMB)
+library(ggh4x)
+library(viridis)
+library(ggpubr)
+library(knitr)
+library(kableExtra)
+library(tidytext)
+library(ggsflabel)
+library(ggspatial)
+library(ggforce)
+library(htmltools)
+library(sf)
+library(tigris)
+
+plot_theme <- readRDS("templates/plot_theme_v2.RDS")
+
+source('./scripts/run_cjs_model_set.R')
+```
+
+
+```{r}
+#read in Johnson Creek RST estimates
+year <- seq(2021, 2024, by = 1)
+
+johtrp <- setNames(
+  lapply(year, function(y) readRDS(paste0("output/estimates/summer_JOHTRP_", y, ".RDS"))),
+  paste0("johtrp_", year)
+)
+
+#read in 2025 estimates
+#parr_2025 <- readRDS("output/estimates/parr_estimates_multiple_2025_OGR.RDS")
+
+#read in 2021 - 2024 parr estimates
+
+year <- seq(2021, 2025, by = 1)
+parr_estimates <- setNames(
+  lapply(year, function(y) readRDS(paste0("output/estimates/parr", y, ".RDS"))),
+  paste0("estimates_", year)
+)
+
+#and ch for 2021 - 2024
+ch_parr <- setNames(
+  lapply(year, function(y) readRDS(paste0("output/estimates/ch_parr_", y, ".RDS"))),
+  paste0("ch_parr_", year)
+)
+
+
+```
+
+```{r}
+
+#define MPGS
+gri <- c("BEAR6C", "HURRIC", "WALLOR", "CATHEC", "LOSTIR", "IMNAHR", "MINAMR", "GRAND2", "CATCNF", "CATCSF", "CATHEC", "MINAMR") 
+sf_sal <- c("BURNLC", "GROUSC", "JOHNSC", "LAKEC", "SAEFSF", "SALRSF", "SECESR", "SUMITC", "KNOXB")
+mf_sal <- c("CHAMBC", "MARSHC", "CAPEHC", "BEARVC", "ELKC", "LOONC", "VALEYC", "BIG2C")
+wet_clear <- c("LOLOC") 
+dry_clear <- c("NEWSOC", "REDR", "AMERR", "CROOKR")
+
+
+#estimates
+
+#survival
+survival_list <- map(parr_estimates, ~ .x$phi)
+survival_df <- bind_rows(survival_list, .id = "year") %>%
+  mutate(year = str_sub(year, -4)) %>%
+  mutate(mark_season = str_extract(release_group, "(?<=_).*")) %>%
+  mutate(release_group = str_extract(release_group, "^[^_]+")) %>%
+  mutate(mark_season = if_else(is.na(mark_season), "Summer", mark_season)) %>%
+  mutate(mpg = case_when(
+    `release_group` %in% gri  ~ "Grande Ronde/Imnaha",
+    `release_group` %in% sf_sal   ~ "SF Salmon",
+    `release_group` %in% mf_sal ~ "MF Salmon",
+    `release_group` %in% wet_clear    ~ "Wet Clearwater", 
+    `release_group` %in% dry_clear ~ "Dry Clearwater"))
+
+#detection
+detection_list <- map(parr_estimates, ~ .x$p)
+detection_df <- bind_rows(detection_list, .id = "year") %>%
+  mutate(year = str_sub(year, -4))
+
+#cumulative survival
+cumulative_list <- map(parr_estimates, ~ .x$cum_phi)
+cumulative_df <- bind_rows(cumulative_list, .id = "year") %>%
+  mutate(year = str_sub(year, -4)) %>%
+  mutate(mark_season = str_extract(release_group, "(?<=_).*")) %>%
+  mutate(release_group = str_extract(release_group, "^[^_]+")) %>%
+  mutate(mark_season = if_else(is.na(mark_season), "Summer", mark_season)) %>%
+  mutate(mpg = case_when(
+    `release_group` %in% gri  ~ "Grande Ronde/Imnaha",
+    `release_group` %in% sf_sal   ~ "SF Salmon",
+    `release_group` %in% mf_sal ~ "MF Salmon",
+    `release_group` %in% wet_clear    ~ "Wet Clearwater", 
+    `release_group` %in% dry_clear ~ "Dry Clearwater"))
+
+
+obs_sites <- unique(detection_df$site)
+```
+
+
+```{r obs-tbl}
+lgr <- c('GRJ', 'GRS', 'LGRRRR') #s = spillway, #j = juvenile bypass
+down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
+          "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
+SC12 <- c('SC1', 'SC2') #pool detections at SC1 and SC2
+LC12 <- c('LC1', 'LC2') #pool detections at LC1 and LC2
+IR12 <- c('IR1', 'IR2')
+
+obs_tbl <- tibble(
+  release_site = c('AMERR', 
+                   'BEAR6C',
+                   'BEARVC',
+                   'BIG2C',
+                   'BURNLC',
+                   'CAPEHC', 
+                   'CATCNF', 
+                   'CATCSF',
+                   'CATHEC',
+                   'CHAMBC', 
+                   'CROOKR', 
+                   'ELKC',
+                   'GRAND2',
+                   'GROUSC', 
+                   'HURRIC', 
+                   'IMNAHR',
+                   'JOHNSC', 
+                   'KNOXB',
+                   'LAKEC',  
+                   'LOLOC',
+                   'LOONC',
+                   'LOSTIR',
+                   'MARSHC', 
+                   'MINAMR',
+                   'NEWSOC', 
+                   'REDR',
+                   'SAEFSF', 
+                   'SALRSF', 
+                   'SECESR',
+                   'SUMITC', 
+                   'VALEYC',
+                   'WALLOR' 
+  ),
+  obs_loc = list(
+    list(
+      AMERR = "AMERR", 
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12, 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      BEAR6C = "BEAR6C",
+      WR2 = "WR2", 
+      WR1 = "WR1", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      BEARVC = "BEARVC", 
+      BRC = "BRC",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      BIG2C = "BIG2C", 
+      TAY = "TAY", 
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      BURNLC = "BURNLC",
+      ESS = "ESS",
+      SFG = "SFG",
+      LGR = lgr,
+      Down = down
+    ), 
+    list(
+      CAPEHC = "CAPEHC",
+      MAR = "MAR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATCNF = "CATCNF",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATCSF = "CATCSF",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CATHEC = "CATHEC",
+      UGR = "UGR", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      CHAMBC = "CHAMBC",
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      CROOKR = "CROOKR",
+      CRA = "CRA",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      ELKC = "ELKC",
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      GRAND2 = "GRAND2",
+      UGS = "UGS", 
+      UGR = "UGR", 
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      GROUSC = "GROUSC",
+      ZEN = "ZEN", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      HURRIC = "HURRIC", 
+      WR2 = "WR2", 
+      WR1 = "WR1", 
+      LGR = lgr, 
+      Down = down
+    ),  
+    list(
+      IMNAHR = "IMNAHR",
+      IR3 = "IR3",
+      IR12 = IR12, 
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      JOHNSC = "JOHNSC",
+      ESS = "ESS", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      KNOXB = "KNOXB", 
+      KRS = "KRS", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      LAKEC = "LAKEC",
+      ZEN = "ZEN", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      LOLOC = "LOLOC", 
+      LC12 = LC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      LOONC = "LOONC", 
+      LGR = lgr, 
+      Down = down
+    ),
+    list(
+      LOSTIR = "LOSTIR",
+      WR2 = "WR2",
+      WR1 = "WR1",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      MARSHC = "MARSHC",
+      MAR = "MAR", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      MINAMR = "MINAMR",
+      MR1 = "MR1",
+      WR1 = "WR1",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      NEWSOC = "NEWSOC",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      REDR = "REDR",
+      SC4 = "SC4",
+      SC3 = "SC3", 
+      SC12 = SC12,
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      SAEFSF = "SAEFSF",
+      ESS = "ESS", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      SALRSF = "SALRSF",
+      KRS = "KRS", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      SECESR = "SECESR",
+      ZEN = "ZEN", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      SUMITC = "SUMITC",
+      ZEN = "ZEN", 
+      SFG = "SFG", 
+      LGR = lgr, 
+      Down = down
+    ), 
+    list(
+      VALEYC = "VALEYC",
+      VC2 = "VC2",
+      LGR = lgr,
+      Down = down
+    ),
+    list(
+      WALLOR = "WALLOR", 
+      WR2 = "WR2", 
+      WR1 = "WR1", 
+      LGR = lgr, 
+      Down = down
+    )
+  )
+)
+```
+
+
+```{r, message=F, warning=F}
+#map showing 2025 sites
+
+mrr_meta <- queryMRRMeta()
+int_meta <- queryInterrogationMeta()
+
+flowline <- readRDS("shiny/shiny_data/snake_river_flowline_NHD.RDS")
+huc4 <- read_sf(dsn = "shiny/shiny_data/WBDHU4.shp", layer = "WBDHU4", crs = 4326)
+
+watershed_boundary <- huc4 %>% filter(name == "Lower Snake")
+
+#get mark files to pull lat/long
+activity <- "parr"
+tag_yr = 2025
+
+file_df <- check_mark_groups_tag_yr(activity = activity, tag_year = tag_yr)
+
+# we can only run survivals if we have interrogation or complete tag history information
+mark_groups <- file_df %>% filter(cth_exists)
+
+mark_df <- map_df(mark_groups$mark_file,
+                    ~readRDS(file.path(file_path, .)))
+
+coords <- mark_df %>%
+    select(release_site, location_latitude, location_longitude, location_rkmext) %>%
+    distinct() %>% 
+    mutate(year = tag_yr)
+
+#15 sites have missing coordinates
+#is there a way to get from river KM to lat/long? 
+#each individual release location
+
+#coords %>% filter(is.na(location_latitude)) %>% select(release_site) %>% distinct()
+
+
+#Approximate tagging locations from Mike
+#need to get actual coordinates 
+missing_coords <- as.data.frame(matrix(c("CAPEHC", 44.39423, -115.16989, 
+                    "MARSHC", 44.39641, -115.16912, 
+                    "CHAMBC", 45.37165, -115.19030, 
+                    "LAKEC", 45.27440, -115.91761, 
+                    "SECESR", 45.21820, -115.80757, 
+                    "SALRSF", 44.65366, -115.70245, 
+                    "CATCNF", 45.13152, -117.62896, 
+                    "CATCSF", 45.11681, -117.63871, 
+                    "CATHEC", 45.15179, -117.73878, 
+                    "GRAND2", 45.11310, -118.36519, 
+                    "LOSTIR", 45.35481, -117.41845, 
+                    "MINAMR", 45.60728, -117.72935, 
+                    "WALLOR", 45.38300, -117.25035, 
+                    "IMNAHR", 45.40361, -116.79054
+), ncol = 3, byrow = T))
+
+colnames(missing_coords) <- c("release_site", "location_latitude", "location_longitude")
+#Capehorn 44.39423, -115.16989
+#Marsh 44.39641, -115.16912
+#Chamberlin 45.37165, -115.19030
+#Lake 45.27440, -115.91761
+#Secesh 45.21820, -115.80757
+#South fork salmon river 44.65366, -115.70245
+#north fork catherine 45.13152, -117.62896
+#south fork catherine 45.11681, -117.63871
+#catherine creek 45.15179, -117.73878
+#grand2 45.11310, -118.36519
+#lostine 45.35481, -117.41845
+# minam 45.60728, -117.72935
+#wallowa 45.38300, -117.25035
+#imnaha 45.40361, -116.79054
+
+coords <- coords %>%
+  mutate(location_latitude = as.character(location_latitude), 
+         location_longitude = as.character(location_longitude)) %>%
+  rows_update(missing_coords, by = "release_site") %>% 
+  filter(!is.na(location_longitude))
+
+mrr_sites <- coords %>%
+  mutate(type = "MRR") %>%
+  select(-year, -location_rkmext) %>%
+  rename(site_code = release_site) %>%
+  st_as_sf(
+    coords = c("location_longitude", "location_latitude"),
+    crs = 4326,
+    remove = TRUE
+  )  
+
+#"mean" release location for labeling
+mean_location <- coords %>%
+  mutate(location_latitude = as.numeric(location_latitude), 
+         location_longitude = as.numeric(location_longitude)) %>%
+  group_by(release_site) %>% 
+  filter(!is.na(location_longitude)) %>%
+  summarise(longitude = mean(location_longitude), latitude = mean(location_latitude)) %>%
+  rename(site_code = release_site)  %>%
+  st_as_sf(
+    coords = c("longitude", "latitude"),
+    crs = 4326,
+    remove = TRUE
+  ) %>% 
+  mutate(type = "MRR")
+
+iptds_sf = int_meta |>
+  select(
+    site_code = siteCode,
+    #name,
+    latitude,
+    longitude
+  ) |> 
+  filter(site_code %in% c(obs_sites, "IR1", "IR2", "LC1", "LC2", "SC1", "SC2")) %>%
+  st_as_sf(
+    coords = c("longitude", "latitude"),
+    crs = 4326
+  ) %>%
+  mutate(type = "INT")
+
+#coords for lower granite
+
+LGR_coord <- mrr_meta %>%
+  filter(siteCode == "LGR") %>%
+  select(siteCode, latitude, longitude) %>%
+  mutate(type = "INT") %>%
+  st_as_sf(
+    coords = c("longitude", "latitude"),
+    crs = 4326,
+    remove = TRUE
+  ) %>%
+  rename(site_code = siteCode)
+
+#combine mrr and iptds sites for better labeling
+sites_complete <- rbind(iptds_sf, mean_location, LGR_coord)
+
+states <- states(cb = TRUE, progress_bar = FALSE) %>%
+  st_transform(st_crs(flowline)) %>%
+  filter(STUSPS %in% c("ID", "WA", "OR"))
+
+map <- ggplot() + 
+  geom_sf(data = watershed_boundary, color = "black", fill = NA) +
+  geom_sf(data = subset(flowline, streamorde > 1), color = "steelblue3", aes(linewidth = streamorde)) +
+  geom_sf(data = states, fill = NA) +
+  geom_sf(data = sites_complete, size = 3, aes(fill = type), shape = 21) + 
+  geom_sf_label_repel(data = sites_complete, aes(label = site_code), alpha = 0.7, size = 3) +
+  scale_linewidth(range = c(0.5, 1)) +
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(), 
+        axis.title = element_blank(), 
+        legend.position = "inside",
+        legend.position.inside = c(0.85, 0.85), 
+        legend.text = element_text(size = 12)) + 
+  scale_x_continuous(limits = c(-119, -113), expand = c(0, 0)) + 
+  scale_y_continuous(limits = c(43.7, 47.5), expand = c(0, 0)) +
+  guides(linewidth = "none") +
+  scale_fill_manual(values = c("red3", "gold2"), name = "Type", labels = c("Detection site", "Tagging site")) + 
+  annotation_scale(location = "bl", text_cex = 0.9, style = "ticks") + 
+  annotation_north_arrow(location = "bl", pad_y = unit(10, "mm"), 
+                         style = north_arrow_orienteering(), 
+                         width = unit(10, "mm"), height = unit(10, "mm")) 
+
+  
+```
+
+
+```{r}
+#compare Johnson Creek RST estimates to JC parr tagging estimates
+johtrp_phi_list <- map(johtrp, "phi")
+johtrp_phi_df <- bind_rows(johtrp_phi_list, .id = "year") %>%
+  mutate(year = str_sub(year, -4))
+
+parr_2025 <- parr_estimates$estimates_2025
+
+johnsc_phi <- parr_2025$phi %>%
+  filter(release_group == "JOHNSC_Summer") %>%
+  mutate(year = 2025)
+
+johnsc_comparison <- rbind(johtrp_phi_df, johnsc_phi)
+
+fig_johnson_creek <- johnsc_comparison %>%
+  mutate(from_site = if_else(from_site == "JOHTRP", "JOHNSC", from_site)) %>%
+  unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+  mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+ggplot(aes(x = int_label, y = phi)) + 
+  geom_point(aes(fill = year, shape = release_group), size = 5, position = position_dodge(width = 0.2)) + 
+  geom_errorbar(aes(ymin = lcl, ymax = ucl, color = year), width = 0.1, position = position_dodge(width = 0.2)) + 
+  plot_theme + 
+  labs(fill = "Year", color = "Year") +
+  xlab(" ") + 
+  ylab("Survival") + 
+  guides(fill = guide_legend(override.aes = list(shape = 21))) +
+  scale_shape_manual(values = c(24, 21), name = "Method", labels = c("Electrofishing", "Screw trap"))
+  
+  
+  
+```
+
+### Comparison to RST
+
+```{r, fig.width=10, fig.height = 5, fig.cap = "Estimated reach-specific survival for juvenile sp/sum Chinook salmon tagged in Johnson Creek from 2021 - 2025. From 2021 - 2024, fish were captured using a rotary screw trap, and in 2025 fish were captured by backpack electrofishing."}
+fig_johnson_creek
+```
+
+### Sample sizes
+
+
+```{r, fig.width = 10, fig.height=10}
+#map
+```
+
+
+```{r}
+#summarize number of tags per release group and number of detections per site by year for parr tagging
+#2021 - 2025
+
+lgr <- c('GRJ', 'GRS', 'LGRRRR') #s = spillway, #j = juvenile bypass
+down <- c("GOJ", "LMJ", "ICH", "MCJ", "JDJ", "B2J", "BCC",
+          "PD5", "PD6", "PD7", "PD8", "PDO", "PDW", "TWX")
+SC12 <- c('SC1', 'SC2') #pool detections at SC1 and SC2
+LC12 <- c('LC1', 'LC2') #pool detections at LC1 and LC2
+IR45 <- c('IR4', 'IR5') #pool detections at IR4 and IR5
+IR12 <- c('IR1', 'IR2')
+
+
+
+release_sites <- obs_tbl$release_site
+
+
+year <- seq(2021, 2025, by = 1)
+
+n_release_group <- map(ch_parr, ~ .x %>% 
+  select(tag_code, obs_site, event_type, release_site) %>%
+  filter(event_type == "Mark") %>%
+  distinct() %>% 
+  group_by(release_site) %>%
+  count())
+
+n_release_group_df <- bind_rows(n_release_group, .id = "year") %>%
+  mutate(year = str_sub(year, -4))  %>%
+  mutate(mpg = case_when(
+    `release_site` %in% gri  ~ "Grande Ronde/Imnaha",
+    `release_site` %in% sf_sal   ~ "SF Salmon",
+    `release_site` %in% mf_sal ~ "MF Salmon",
+    `release_site` %in% wet_clear    ~ "Wet Clearwater", 
+    `release_site` %in% dry_clear ~ "Dry Clearwater")) 
+
+n_release_group_wide <- n_release_group_df %>%
+  pivot_wider(names_from = year, values_from = n) %>%
+  arrange(mpg)
+
+mpg_group_count <- table(n_release_group_wide$mpg)
+  
+n_detect_site <- map(ch_parr, ~ .x %>%
+  select(tag_code, obs_site, event_type, release_site) %>%
+  mutate(obs_site = replace_when(obs_site, 
+    obs_site %in% lgr ~ "LGR",
+    obs_site %in% down ~ "Down", 
+    obs_site %in% LC12 ~ "LC12", 
+    obs_site %in% SC12 ~ "SC12", 
+    obs_site %in% IR12 ~ "IR12", 
+    obs_site %in% IR45 ~ "IR45"
+    )) %>%
+  filter(event_type != "Mark") %>% 
+  filter(!(obs_site %in% release_sites)) %>%
+  filter(obs_site %in% obs_sites) %>%
+  select(tag_code, obs_site) %>% 
+  distinct() %>%
+  group_by(obs_site) %>%
+  count())
+
+n_detect_site_df <- bind_rows(n_detect_site, .id = "year") %>%
+  mutate(year = str_sub(year, -4))
+
+n_detect_site_wide <- n_detect_site_df %>%
+  pivot_wider(names_from = year, values_from = n)
+
+
+detection_timing <- map(ch_parr, ~.x %>%
+  filter(event_type != "Mark") %>% #filter out marking events
+   mutate(obs_site = replace_when(obs_site, 
+    obs_site %in% lgr ~ "LGR",
+    obs_site %in% down ~ "Down", 
+    obs_site %in% LC12 ~ "LC12", 
+    obs_site %in% SC12 ~ "SC12", 
+    obs_site %in% IR12 ~ "IR12", 
+    obs_site %in% IR45 ~ "IR45"
+    )) %>%
+  filter(obs_site %in% detection_df$site) %>%
+  filter(!(obs_site %in% release_sites)) %>%
+  select(tag_code, obs_site, first_obs, release_site, mark_release_date) %>%
+  arrange(first_obs))
+
+detection_timing <- map(detection_timing, ~.x %>%
+  mutate(fish_num = 1) %>%
+  group_by(release_site, obs_site) %>%
+  mutate(cumul = cumsum(fish_num), 
+         cum_prop = cumsum(fish_num)/sum(fish_num)))
+
+emigration_timing_plot_list <- map(detection_timing, ~.x %>%
+  filter(max(cumul) > 1) %>%
+  ggplot(aes(x = first_obs, y = cum_prop)) + 
+  geom_line(aes(color = release_site), linewidth = 1) +
+  facet_wrap(~obs_site, ncol = 3) + 
+  plot_theme + 
+  theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ylab("Cumulative proportion") + 
+  xlab("Date") + 
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 1)) + 
+  scale_x_date(expand = c(0, 0)) + 
+  labs(color = "Release site"))
+
+names(emigration_timing_plot_list) <- c("2021", "2022", "2023", "2024", "2025")
+
+#perhaps some evidence that Grande Ronde and Catherine Creek should be run separately
+```
+
+
+```{r tab-1}
+n_release_group_wide %>%
+  select(-mpg) %>%
+  rename('Release site' = release_site) %>%
+  kable(caption = "Number of juvenile sp/sum Chinook salmon tagged by location from 2021 - 2025.") %>%
+  kable_styling() %>%
+  pack_rows(index = mpg_group_count)
+
+```
+
+
+```{r tab-2}
+n_detect_site_wide %>%
+  arrange(obs_site) %>%
+  rename('Detection site' = obs_site) %>%
+  kable(caption = "Number of juvenilei sp/sum Chinook salmon detected at each in-stream PIT tag array and at Lower Granite Dam (LGR) from 2021 - 2025.") %>%
+  kable_styling()
+```
+
+
+```{r, fig.cap="Cumulative emigration timing of juvenile sp/sum Chinook salmon during downstream migration at each in-stream array and at Lower Granite Dam. Each color represents a unique release group."}
+#emigration timing
+
+plot_dropdown <- function(plot_list, label, caption,
+                          width = 8, height = 5, dpi = 150) {
+  uid <- paste0("pd", sample.int(1e8, 1))
+  nms <- names(plot_list)
+
+  uris <- lapply(plot_list, function(p) {
+    f <- tempfile(fileext = ".png")
+    ggsave(f, p, width = width, height = height, dpi = dpi)
+    base64enc::dataURI(file = f, mime = "image/png")
+  })
+
+  select <- tags$select(
+    id = paste0(uid, "-select"),
+    onchange = sprintf(
+      "var s=this.value; document.querySelectorAll('.%1$s-plot').forEach(function(e){e.style.display=(e.id==='%1$s-'+s)?'block':'none';});",
+      uid
+    ),
+    lapply(seq_along(nms), function(i) tags$option(value = i, nms[i]))
+  )
+
+  panels <- lapply(seq_along(uris), function(i) {
+    tags$div(
+      id = paste0(uid, "-", i),
+      class = paste0(uid, "-plot"),
+      style = if (i == 1) "display:block;" else "display:none;",
+      tags$img(src = uris[[i]], style = "max-width:100%;")
+    )
+  })
+
+  # One caption for the whole dropdown, in the format bookdown numbers
+  cap <- tags$p(
+    class = "caption",
+    HTML(sprintf("(#fig:%s) %s", label, caption))
+  )
+
+  tags$div(class = "figure", select, panels, cap)
+}
+
+
+
+plot_dropdown(emigration_timing_plot_list, width = 12, height = 16, dpi = 300, 
+              label = "emigration-timing",
+              caption = "Cumulative emigration timing of juvenile sp/sum Chinook salmon during downstream migration at each in-stream array and at Lower Granite Dam. Each color represents a unique release group.")
+```
+
+
+
+```{r}
+#initial figures
+
+#will want to separate by MPG eventually, too many panels
+surv_plot_dat <- survival_df %>%
+    mutate(mark_season = fct_relevel(mark_season, "Summer")) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(interval = if_else(int_label == "UGR to LGR", 3, interval)) %>% #manually adjust interval labeling
+    mutate(int_label = fct_reorder(int_label, interval))
+
+surv_plot_list <- surv_plot_dat %>%
+  mutate(mpg = as.character(mpg)) %>%
+    group_split(mpg) %>%
+  map(~ ggplot(.x, aes(x = (int_label), y = phi)) + 
+    geom_errorbar(aes(ymin = lcl, ymax = ucl, color = year, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = year, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap_paginate(~fct_inorder(release_group), scales = "free_x", ncol = 3, nrow = 4, page = 1) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    scale_linetype_manual(values = c(1, 1)) +
+    scale_shape_manual(values = c(21, 22), name = "Season") +
+    labs(fill = "Year", color = "Year") +
+    guides(fill = guide_legend(override.aes = list(shape = 21)), linetype = "none") +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.position = "top") + 
+    ylab("Survival") + 
+    xlab(" ") + 
+    ggtitle(unique(.x$mpg)))
+
+names(surv_plot_list) <- c("Dry Clearwater", "Grande Ronde/Imnaha", "MF Salmon", "SF Salmon", "Wet Clearwater")
+
+fig.detection <- detection_df %>%
+  ggplot(aes(x = site, y = p)) + 
+  geom_errorbar(aes(ymin = lcl, ymax = ucl, color = year), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+  geom_point(size = 4, shape = 21, aes(fill = year), position = position_dodge(width = 0.2)) + 
+  scale_y_continuous(limits = c(0, 1)) + 
+  scale_color_viridis_d(option = "viridis") +
+  scale_fill_viridis_d(option = "viridis") +
+  labs(fill = "Year", color = "Year") +
+  ylab("Detection") + 
+  xlab("Site") +
+  plot_theme
+
+cumulative_plot_dat <- cumulative_df %>%
+    mutate(mark_season = fct_relevel(mark_season, "Summer")) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(to_site = fct_reorder(to_site, interval))
+
+cumulative_plot_list <- cumulative_plot_dat %>%
+   mutate(mpg = as.character(mpg)) %>%
+    group_split(mpg) %>%
+  map(~ ggplot(.x, aes(x = reorder_within(to_site, interval, release_group), y = estimate)) + 
+    geom_errorbar(aes(ymin = lcl, ymax = ucl, color = year, linetype = mark_season), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = year, shape = mark_season), position = position_dodge(width = 0.2)) + 
+      scale_x_reordered() +
+    plot_theme + 
+    facet_wrap_paginate(~fct_inorder(release_group), scales = "free_x", ncol = 3, nrow = 4, page = 1) +
+    scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    scale_linetype_manual(values = c(1, 1)) +
+    scale_shape_manual(values = c(21, 22), name = "Season") +
+      labs(fill = "Year", color = "Year") +
+    guides(fill = guide_legend(override.aes = list(shape = 21)), linetype = "none") +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Cumulative survival") + 
+    xlab(" ")  + 
+    ggtitle(unique(.x$mpg)))
+
+names(cumulative_plot_list) <- c("Dry Clearwater", "Grande Ronde/Imnaha", "MF Salmon", "SF Salmon", "Wet Clearwater")
+```
+
+
+### Survival and detection estimates
+
+```{r surv-plot, fig.width=12, fig.height=15, fig.cap = "Survival"}
+
+
+plot_dropdown(surv_plot_list, width = 12, height = 16, dpi = 300, 
+              label = "survival",
+              caption = "Reach-specific survival estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam. Estimates were produced using multiple release group model; error bars indicate 95% confidence intervals.")
+```
+
+```{r det-plot, fig.width=14, fig.height=5, fig.cap="Detection probability estimates for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam by reach. Estimates were produced using the multiple release group model; error bars indicate 95% confidence intervals."}
+
+fig.detection
+
+```
+
+```{r fig.width=12, fig.height=15, fig.cap = "Cumulative survival"}
+plot_dropdown(cumulative_plot_list, width = 12, height = 14, dpi = 300, 
+              label = "cumulative-survival",
+              caption = "Estimates of cumulative survival for juvenile sp/sum Chinook salmon during downstream migration to Lower Granite Dam. Estimates were produced using the multiple release group model; error bars indicate 95% confidence intervals.")
+```
+
+
+```{r, warning = F, message = F}
+#travel timing
+
+#We are pooling travel timing from all release groups to each reach
+#this aligns with the decision to pool detection probabilities - we assume emigration timing is similar among release groups
+#also increases the sample size a lot 
+#we are separating by year
+
+reaches <- survival_df %>%
+  select(from_site, to_site) %>%
+  distinct()
+
+#some recaptures occurred at tagging site weeks later
+#
+travel_time <- map(ch_parr, ~ .x %>%
+   mutate(obs_site = replace_when(obs_site, 
+    obs_site %in% lgr ~ "LGR",
+    obs_site %in% down ~ "Down", 
+    obs_site %in% LC12 ~ "LC12", 
+    obs_site %in% SC12 ~ "SC12", 
+    obs_site %in% IR12 ~ "IR12", 
+    obs_site %in% IR45 ~ "IR45"
+    )) %>%
+  select(tag_code, obs_site, first_obs, release_site, event, event_type) %>%
+  arrange(tag_code, first_obs, event) %>%
+  group_by(tag_code) %>%
+  mutate(travel_time = first_obs - lag(first_obs)) %>%
+  mutate(travel_time_day = seconds_to_period(travel_time)) %>%
+  mutate(from_site = lag(obs_site), 
+         to_site = obs_site) %>%
+  filter(!is.na(travel_time_day))) 
+
+travel_time_df <- bind_rows(travel_time, .id = "year") %>%
+  mutate(year = str_sub(year, -4)) %>%
+  right_join(reaches, by = c("from_site", "to_site"))
+
+median_travel_time <- travel_time_df %>%
+  group_by(from_site, to_site, year) %>% 
+  mutate(travel_time = as.numeric(travel_time)/86400) %>%
+  summarise(median = median(travel_time), 
+            min = min(travel_time),
+            q1 = quantile(travel_time, 0.25, na.rm = T),
+            q3 = quantile(travel_time, 0.75, na.rm = T),
+            max = max(travel_time),
+            sample = length(travel_time))
+
+surv_travel_time <- survival_df %>%
+  left_join(median_travel_time, by = c("year", "from_site", "to_site")) %>%
+  mutate(mort_day = (1 - phi)/median, 
+         mort_ucl = (1 - lcl)/median,
+         mort_lcl = (1 - ucl)/median)
+
+travel_survival_fig <- surv_travel_time %>%
+  ggplot(aes(x = median, y = phi)) + 
+  geom_point(aes(fill = year), size = 4, shape = 21) + 
+  plot_theme + 
+  xlab("Median travel time (days)") + 
+  ylab("Estimated reach-specific survival") + 
+  scale_x_continuous(limits = c(0, 350)) + 
+  scale_y_continuous(limits = c(0, 1)) + 
+  scale_fill_viridis_d(option = "viridis") + 
+  labs(fill = "Year")
+  
+
+med_travel_time_dat <- surv_travel_time %>%
+   mutate(mark_season = fct_relevel(mark_season, "Summer")) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    filter(!is.na(median))
+
+med_travel_time_plot_list <- med_travel_time_dat %>%
+    mutate(mpg = as.character(mpg)) %>%
+    group_split(mpg) %>%
+    map(~ ggplot(.x, aes(x = reorder_within(int_label, interval, release_group), y = median)) + 
+    geom_errorbar(aes(ymin = q1, ymax = q3, color = year), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, shape = 21, aes(fill = year), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    scale_x_reordered() +
+    facet_wrap_paginate(~fct_inorder(release_group), scales = "free_x", ncol = 3, nrow = 3, page = 1) +
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    labs(fill = "Year", color = "Year") +  
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.position = "top") + 
+    ylab("Median travel time") + 
+    xlab(" "))
+
+names(med_travel_time_plot_list) <- c("Dry Clearwater", "Grande Ronde/Imnaha", "MF Salmon", "SF Salmon", "Wet Clearwater")
+
+daily_mort_dat <- surv_travel_time %>%
+   mutate(mark_season = fct_relevel(mark_season, "Summer")) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+  filter(!is.na(mort_day))
+
+daily_mort_plot_list <- daily_mort_dat %>%
+  filter(mort_day < 8) %>%
+    mutate(mpg = as.character(mpg)) %>%
+    group_split(mpg) %>%
+  map(~ ggplot(.x, aes(x = reorder_within(int_label, interval, release_group), y = mort_day*100)) + 
+    #geom_errorbar(aes(ymin = mort_lcl*100, ymax = mort_ucl*100, color = year), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = year, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    scale_x_reordered() +
+    facet_wrap_paginate(~fct_inorder(release_group), scales = "free", ncol = 3, nrow = 3, page = 1) +
+    scale_y_continuous(limits = c(0, NA)) +
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    scale_shape_manual(values = c(21, 22), name = "Season") +
+    labs(fill = "Year") +
+    guides(fill = guide_legend(override.aes = list(shape = 21)), linetype = "none") +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        legend.position = "top") + 
+    ylab("Mortality per day (%)") + 
+    xlab(" ") + 
+    ggtitle(unique(.x$mpg)))
+
+names(daily_mort_plot_list) <- c("Dry Clearwater", "Grande Ronde/Imnaha", "MF Salmon", "SF Salmon", "Wet Clearwater")
+
+# surv_travel_time %>% 
+#   #filter(mort_day < 8) %>%
+#   mutate(type = if_else(to_site == "LGR", "lgr", "other")) %>%
+#   ggplot(aes(x = mort_day)) + 
+#   geom_density(aes(color = type))
+```
+
+### Travel time
+
+```{r, fig.width=10, fig.height = 7, fig.cap= "The median travel time in days per reach and the estimated reach specific survival rate for juvenile sp/sum Chinook salmon in the Snake River basin."}
+travel_survival_fig
+```
+
+```{r, fig.width=12, fig.height=15, fig.cap = "The estimated percent mortality by day by reach and release group for juvenile sp/sum Chinook salmon."}
+plot_dropdown(med_travel_time_plot_list, width = 12, height = 12, dpi = 300, 
+              label = "travel-time",
+              caption = "The median travel time by reach for juvenile sp/sum Chinook salmon. Error bars indicate 25th and 75th percentiles.")
+```
+
+```{r, fig.width=12, fig.height=15, fig.cap = "The estimated percent mortality by day by reach and release group for juvenile sp/sum Chinook salmon."}
+plot_dropdown(daily_mort_plot_list, width = 12, height = 12, dpi = 300, 
+              label = "daily-mortality",
+              caption = "The estimated percent mortality by day by reach and release group for juvenile sp/sum Chinook salmon.")
+```
+
+
+```{r}
+#distance between sites
+
+mrr_meta <- queryMRRMeta()
+int_meta <- queryInterrogationMeta()
+
+
+years <- seq(2021, 2025, by = 1)
+
+rkm_list <- vector("list", length(years))
+
+activity <- "parr"
+
+for (y in 1:length(years)) {
+
+  tag_yr = years[y]
+
+  file_df <- check_mark_groups_tag_yr(activity = activity, tag_year = tag_yr)
+
+# we can only run survivals if we have interrogation or complete tag history information
+  mark_groups <- file_df %>% filter(cth_exists)
+
+  mark_df <- map_df(mark_groups$mark_file,
+                    ~readRDS(file.path(file_path, .)))
+  
+  rkm <- mark_df %>%
+    select(release_site, location_rkmext) %>%
+    distinct() %>% 
+    mutate(year = tag_yr)
+  
+  rkm_list[[y]] <- rkm
+  
+}
+
+rkm_df <- bind_rows(rkm_list)
+
+#most sites had pretty consistent tagging locations (>10 km difference among locations)
+#exceptions are CATHEC, GRAND2, LOSTIR, WALLOR, MINAMR
+# ggplot(rkm_df, aes(x = release_site, y = location_rkmext)) + 
+#   geom_boxplot()
+
+# rkm_df %>%
+#   group_by(release_site) %>%
+#   summarise(range = max(location_rkmext) - min(location_rkmext)) %>%
+#   print(n = 35)
+
+#take the mean 
+rkm_ext <- rkm_df %>%
+  group_by(release_site) %>%
+  summarise(rkm_ext = mean(location_rkmext))
+
+#pull rkm info from mrr_meta for complete list of sites of interest
+
+#need to fix for combined arrays (IR12, LC12, SC12)
+mrr_sites <- c(release_sites, obs_sites, lgr, IR12, LC12, SC12)
+
+mrr_meta_filter <- mrr_meta %>%
+  filter(siteCode %in% mrr_sites) %>%
+  select(siteCode, name, rkm, type)
+
+int_meta_filter <- int_meta %>%
+  filter(siteCode %in% mrr_sites) %>%
+  select(siteCode, name, rkm, siteType) %>%
+  rename(type = siteType)
+
+site_meta <- rbind(mrr_meta_filter, int_meta_filter)
+
+#rkm_sum = distance from mouth of Columbia to river mouth for mrr sites, distance from mouth of columbia to int sites
+site_meta <- site_meta %>%
+  mutate(rkm_sum = sapply(strsplit(site_meta$rkm, ".", fixed = TRUE),
+                            function(x) sum(as.numeric(x))))
+  
+site_meta <- site_meta %>%
+  left_join(rkm_ext %>% rename(siteCode = release_site), by = "siteCode") %>%
+  replace_na(list(rkm_ext = 0)) %>%
+  mutate(total_rkm = rkm_sum + rkm_ext)
+
+#take means to calculate distances for IR12, LC12, SC12
+
+site_meta <- site_meta %>%
+   mutate(siteCode = replace_when(siteCode,
+    siteCode %in% LC12 ~ "LC12", 
+    siteCode %in% SC12 ~ "SC12", 
+    siteCode %in% IR12 ~ "IR12"
+    )) %>%
+  #fixing WR2 rkm based on text stating rkm is 32, not 21
+  mutate(total_rkm = if_else(siteCode == "WR2", 955, total_rkm)) %>%
+  group_by(siteCode) %>%
+  summarise(
+    across(c(name, rkm, type, rkm_sum, rkm_ext), first),
+    total_rkm = mean(total_rkm),
+    .groups = "drop")
+
+#NOTE - DISTANCES THAT ARE NOT IN CONTINUOUS DOWNSTREAM PATH ARE WRONG
+#survival estimates only exist for downstream migration pathways, so the additional pairwise distances are irrelevant
+
+d <- dist(setNames(site_meta$total_rkm, site_meta$siteCode))   # absolute differences
+
+
+# long format
+pairwise_dist <- as.data.frame(as.table(as.matrix(d))) %>%
+  rename(from_site = Var1, to_site = Var2, dist_km = Freq)
+
+dist_surv <- survival_df %>%
+  left_join(pairwise_dist, by = c("from_site", "to_site")) %>%
+  mutate(mort_km = (1 - phi)/dist_km, 
+         mort_ucl = (1 - lcl)/dist_km, 
+         mort_lcl = (1 - ucl)/dist_km)
+
+dist_survival_fig <- ggplot(dist_surv, aes(x = dist_km, y = phi)) + 
+  geom_point(aes(fill = year), size = 4, shape = 21) + 
+  plot_theme + 
+  xlab("Reach length (km)") + 
+  ylab("Estimated reach-specific survival") + 
+  labs(fill = "Year") +
+  scale_x_continuous(limits = c(0, 800)) + 
+  scale_y_continuous(limits = c(0, 1)) + 
+  scale_fill_viridis_d(option = "viridis")
+
+# ggplot(dist_surv, aes(x = mort_km)) + 
+#   geom_histogram()
+# 
+# ggplot(dist_surv, aes(x = interval, y = mort_km)) + 
+#   geom_boxplot()
+
+dist_surv_dat <- dist_surv %>%
+    mutate(mark_season = fct_relevel(mark_season, "Summer")) %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval))
+
+mort_km_plot_list <- dist_surv_dat %>% 
+    mutate(mpg = as.character(mpg)) %>%
+    group_split(mpg) %>%
+  map(~ ggplot(.x,aes(x = reorder_within(int_label, interval, release_group), y = mort_km*100)) + 
+    #geom_errorbar(aes(ymin = mort_lcl*100, ymax = ucl*100, color = year), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, aes(fill = year, shape = mark_season), position = position_dodge(width = 0.2)) + 
+    scale_x_reordered() +
+    plot_theme + 
+    facet_wrap_paginate(~fct_inorder(release_group), scales = "free", ncol = 3, nrow = 4, page = 1) +
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    scale_shape_manual(values = c(21, 22), name = "Season") +
+    labs(fill = "Year") +  
+     guides(fill = guide_legend(override.aes = list(shape = 21)), linetype = "none") +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.position = "top") + 
+    ylab("Mortality per km (%)") + 
+    xlab(" ") + 
+    ggtitle(unique(.x$mpg)))
+
+names(mort_km_plot_list) <- c("Dry Clearwater", "Grande Ronde/Imnaha", "MF Salmon", "SF Salmon", "Wet Clearwater")
+
+#calculate km/day
+
+km_day <- dist_surv %>% 
+  select(from_site, to_site, interval, dist_km, phi, year, mort_km) %>%
+  left_join(travel_time_df, by = c("from_site", "to_site", "year")) %>%
+  mutate(travel_time_numeric = as.numeric(travel_time)/86400) %>%
+  mutate(km_day = dist_km/travel_time_numeric) %>%
+  filter(km_day < 250)
+
+# ggplot(km_day, aes(x = km_day)) + 
+#   geom_histogram()
+
+# ggplot(km_day, aes(x = km_day, y = mort_km*100)) + 
+#   geom_point(aes(fill = year), size = 4, shape = 21, alpha = 0.5) + 
+#   plot_theme + 
+#   xlab("Travel rate (km/day)") + 
+#   ylab("Mortality/km (%)") + 
+#   scale_x_continuous(limits = c(0, 150)) + 
+#   scale_y_continuous(limits = c(0, 16)) + 
+#   scale_fill_viridis_d(option = "viridis")
+
+
+median_emigration <- km_day %>%
+  group_by(release_site, from_site, to_site, year) %>%
+  summarise(med_emigration = median(km_day), phi = median(phi), mort_km = median(mort_km), .groups = "drop_last")
+
+travel_rate_survival_fig <- ggplot(median_emigration, aes(x = med_emigration, y = phi)) + 
+  geom_point(aes(fill = year), size = 4, shape = 21) + 
+  plot_theme + 
+  xlab("Median travel rate (km/day)") + 
+  ylab("Estimated reach-specific survival") + 
+  labs(fill = "Year") + 
+  scale_x_continuous(limits = c(0, 50)) + 
+  scale_y_continuous(limits = c(0, 1)) + 
+  scale_fill_viridis_d(option = "viridis")
+
+km_day_plot <- km_day %>%
+    unite(col = "int_label", from_site, to_site, sep = " to ", remove = FALSE) %>%
+    mutate(interval = as.numeric(interval)) %>%
+    mutate(int_label = fct_reorder(int_label, interval)) %>%
+    ggplot(aes(x = int_label, y = km_day)) + 
+    #geom_errorbar(aes(ymin = lcl, ymax = ucl, color = year), width = 0.1, linewidth = 1, position = position_dodge(width = 0.2)) +
+    geom_point(size = 4, shape = 21, aes(fill = year), position = position_dodge(width = 0.2)) + 
+    plot_theme + 
+    facet_wrap_paginate(~fct_inorder(release_site), scales = "free", ncol = 4, nrow = 2, page = 2) +
+    #scale_y_continuous(limits = c(0, 1)) + 
+    scale_color_viridis_d(option = "viridis") +
+    scale_fill_viridis_d(option = "viridis") +
+    theme(strip.background = element_rect(fill = "grey", color = "black"), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab("Survival") + 
+    xlab(" ")
+```
+
+### Travel distance
+
+```{r, fig.width = 10, fig.height = 6, fig.cap = "The length of the reach (km) and the estimated reach-specific survival of juvenile sp/sum Chinook salmon. Reach-specific survival was estimated for each release group, so there are multiple survival estimates associated with some reaches."}
+dist_survival_fig
+```
+
+
+```{r, fig.width = 12, fig.height = 14, fig.cap = "Estimated percent mortality per kilometer for juvenile sp/sum Chinook salmon during downstream migration."}
+plot_dropdown(mort_km_plot_list, width = 12, height = 16, dpi = 300, 
+              label = "mortality-km",
+              caption = "Estimated percent mortality per kilometer for juvenile sp/sum Chinook salmon during downstream migration.")
+```
+
+
+```{r, fig.width = 10, fig.height = 6, fig.cap = "The median travel rate (km/day) and the estimated survival of juvenile sp/sum Chinook salmon for each reach."}
+travel_rate_survival_fig
+```
+
+
+
+

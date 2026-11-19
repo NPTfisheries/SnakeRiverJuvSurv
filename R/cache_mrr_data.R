@@ -150,7 +150,6 @@ cache_mrr_data <- function(project_code,
     )
     
     # basic retrieval QC
-    
     if (!is.list(mrr) || !is.data.frame(mrr$sessions) || !is.data.frame(mrr$events)) {
       stop("Unexpected MRR data structure.")
     }

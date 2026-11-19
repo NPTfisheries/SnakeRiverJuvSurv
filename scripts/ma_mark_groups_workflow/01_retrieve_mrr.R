@@ -3,7 +3,7 @@
 # Author(s): Mike Ackerman, Michelle Briggs, and Ryan Kinzer
 # 
 # Date Created: November 18, 2026
-#   Last Modified: 
+#   Last Modified: November 19, 2026
 #
 # Purpose: Inventory, retrieve, and cache PTAGIS MRR data by project and file year
 #
@@ -33,7 +33,7 @@ project_codes_of_interest = c(
   "MAP"                         # McCall Anadromous Projects
 )
 
-calendar_years_of_interest = 2025L:2026L
+calendar_years_of_interest = 2021L:2025L
 
 project_years = crossing(
   project_code  = project_codes_of_interest, 

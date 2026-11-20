@@ -30,7 +30,7 @@ cache_dir = here("data", "cache", "ptagis", "mrr")
 
 # label run and directory for output
 prep_id    = paste0("prep_", format(Sys.time(), "%Y%m%d_%H%M"))
-output_dir = here("data", "mark_prep", prep_id)
+output_dir = here("data", "processed", "mark_prep", prep_id)
 
 #------------------------
 # COMPILE CACHED MRR DATA

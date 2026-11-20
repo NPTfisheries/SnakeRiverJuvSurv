@@ -38,13 +38,10 @@ output_dir = here("data", "mark_prep", prep_id)
 # identify cached MRR files
 cache_files = crossing(
   project_code = project_codes,
-  file_year = file_years
+  file_year    = file_years
 ) |>
   mutate(
-    cache_path = file.path(
-      cache_dir, project_code,
-      paste0("mrr_", project_code, "_", file_year, ".rds")
-    )
+    cache_path = file.path(cache_dir, project_code, paste0("mrr_", project_code, "_", file_year, ".rds"))
   )
 
 # require all requested caches
@@ -52,11 +49,7 @@ missing_files = cache_files |>
   filter(!file.exists(cache_path))
 
 if (nrow(missing_files) > 0) {
-  stop(
-    "Missing MRR caches:\n",
-    paste(missing_files$cache_path, collapse = "\n"),
-    "\nRun 01_retrieve_mrr.R or revise the selected projects/years."
-  )
+  stop("Missing MRR caches:\n", paste(missing_files$cache_path, collapse = "\n"), "\nRun 01_retrieve_mrr.R or revise the selected projects/years.")
 }
 
 # read cached datasets
@@ -179,13 +172,13 @@ candidate_mark_summary = candidate_marks |>
 
 # PTAGIS conditional-comment codes; see https://www.ptagis.org/Resources/ValidationCodes
 mortality_codes = c("M", "MB", "MK", "MS", "SM")
-yearling_codes = c("Y", "PR")         # possible yearling / precocials
-concern_codes = c("B", "I", "DB", "L")
+yearling_codes  = c("Y", "PR")
+concern_codes   = c("B", "I", "DB", "L")
 
 # patterns match complete codes
 mortality_pattern = paste0("\\b(", paste(mortality_codes, collapse = "|"), ")\\b")
 yearling_pattern  = paste0("\\b(", paste(yearling_codes, collapse = "|"), ")\\b")
-concern_pattern  = paste0("\\b(", paste(concern_codes, collapse = "|"), ")\\b")
+concern_pattern   = paste0("\\b(", paste(concern_codes, collapse = "|"), ")\\b")
 
 candidate_marks = candidate_marks |>
   mutate(
@@ -236,7 +229,7 @@ mark_availability = candidate_marks |>
     .groups     = "drop"
   ) |>
   arrange(
-    species_run, rear, release_year,  method_group, release_site, season
+    species_run, rear, release_year, method_group, release_site, season
   )
 
 # add the number of candidate records contributed by each source cache

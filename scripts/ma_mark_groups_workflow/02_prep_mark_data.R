@@ -265,9 +265,6 @@ prep_manifest = list(
 )
 
 # create a new output folder without overwriting a previous run
-if (dir.exists(output_dir)) {
-  stop("Preparation output already exists: ", output_dir)
-}
 dir.create(output_dir, recursive = TRUE)
 
 # save input & prep manifests and prepared mark data

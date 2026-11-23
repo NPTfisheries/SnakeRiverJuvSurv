@@ -157,7 +157,7 @@ group_candidates = available_marks |>
 group_summary = group_candidates |>
   group_by(across(all_of(group_vars))) |>
   summarise(
-    n_start = n(),
+    n_start     = n(),
     n_mortality = sum(qc_mortality),
     n_yearling  = sum(qc_yearling),
     n_concern   = sum(qc_concern),

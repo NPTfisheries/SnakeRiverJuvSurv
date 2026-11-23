@@ -3,7 +3,7 @@
 # Author(s): Mike Ackerman, Michelle Briggs, and Ryan Kinzer
 #
 # Date Created: November 19, 2026
-#   Last Modified: November 20, 2026
+#   Last Modified: November 23, 2026
 #
 # Purpose: Compile cached PTAGIS MRR data, prepare juvenile release events,
 #   summarize available data, and save documented outputs for mark-group creation.
@@ -21,7 +21,7 @@ library(PITmodelR)
 
 #------------------------------------
 # SELECT PROJECT CODES AND FILE YEARS
-project_codes = c("CDR", "GAA", "PJC", "SCS", "BDA", "MAP")
+project_codes = c("BDA", "CDR", "GAA", "MAP", "PJC", "OGR", "SCS", "SFC")
 file_years    = 2021L:2025L
 pdv_option    = "drop"  # "drop" or "map"
 
@@ -107,7 +107,7 @@ if (!all(mrr$events$file_name %in% mrr$sessions$file_name)) {
   stop("Some MRR events have no matching session.")
 }
 
-#-----------------
+#------------------
 # PREPARE MARK DATA
 
 # event variables needed for mark-group creation and QC
@@ -145,8 +145,8 @@ candidate_marks = mrr$events |>
   mutate(
     species_run = case_when(
       str_sub(species_run_rear_type, 1, 2) %in% c("11", "12") ~ "SpSu_Chinook",
-      str_sub(species_run_rear_type, 1, 2) == "13" ~ "Fall_Chinook",
-      str_sub(species_run_rear_type, 1, 1) == "3" ~ "Steelhead",
+      str_sub(species_run_rear_type, 1, 2) == "13"            ~ "Fall_Chinook",
+      str_sub(species_run_rear_type, 1, 1) == "3"             ~ "Steelhead",
       TRUE ~ "Other"
     ),
     rear = str_sub(species_run_rear_type, 3, 3),
@@ -167,7 +167,7 @@ candidate_mark_summary = candidate_marks |>
   ) |>
   arrange(species_run, rear, release_year, desc(n_events))
 
-#--------------------------------------
+#---------------------------------------
 # DEFINE GROUPING VARIABLES AND QC FLAGS
 
 # PTAGIS conditional-comment codes; see https://www.ptagis.org/Resources/ValidationCodes
@@ -185,32 +185,32 @@ candidate_marks = candidate_marks |>
     # capture-method groups
     method_group = case_when(
       capture_method %in% c("BSEINE", "PSEINE", "HOOK", "SHOCK") ~ "ROVING",
-      capture_method == "SCREWT" ~ "SCREWT",
-      capture_method == "DIPNET" ~ "DIPNET",
+      capture_method == "SCREWT"                                 ~ "SCREWT",
+      capture_method == "DIPNET"                                 ~ "DIPNET",
       TRUE ~ "OTHER"
     ),
-        # species-specific seasons using release month
+    # species-specific seasons using release month
     season = case_when(
       species_run == "SpSu_Chinook" & between(release_month, 1, 6)  ~ "spring",
       species_run == "SpSu_Chinook" & between(release_month, 7, 8)  ~ "summer",
       species_run == "SpSu_Chinook" & between(release_month, 9, 12) ~ "fall",
       species_run == "Fall_Chinook" & between(release_month, 1, 12) ~ "subyearling",
-      species_run == "Steelhead" & between(release_month, 1, 6)     ~ "spring",
-      species_run == "Steelhead" & between(release_month, 7, 8)     ~ "summer",
-      species_run == "Steelhead" & between(release_month, 9, 12)    ~ "fall",
+      species_run == "Steelhead"    & between(release_month, 1, 6)  ~ "spring",
+      species_run == "Steelhead"    & between(release_month, 7, 8)  ~ "summer",
+      species_run == "Steelhead"    & between(release_month, 9, 12) ~ "fall",
       is.na(release_month) ~ "missing_date",
       TRUE ~ "outside_season"
     ),
     # biological concern flags; no exclusions applied yet
     flag_mortality = str_detect(str_to_upper(coalesce(conditional_comments, "")),  mortality_pattern),
     flag_yearling  = species_run == "SpSu_Chinook" & str_detect(str_to_upper(coalesce(conditional_comments, "")), yearling_pattern),
-    flag_concern = str_detect(str_to_upper(coalesce(conditional_comments, "")), concern_pattern)
+    flag_concern   = str_detect(str_to_upper(coalesce(conditional_comments, "")), concern_pattern)
   )
 
 # remove compiled MRR tables
 rm(mrr)
 
-#-----------------------------
+#------------------------------
 # SUMMARIZE AVAILABLE MARK DATA
 
 # availability before biological exclusions or minimum-size filtering
@@ -241,7 +241,7 @@ input_manifest = input_manifest |>
   ) |>
   mutate(n_candidates = replace_na(n_candidates, 0L))
 
-#-----------------------
+#------------------------
 # SAVE PREPARED MARK DATA
 
 # record how mark data was prepared

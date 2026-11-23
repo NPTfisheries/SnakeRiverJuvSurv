@@ -19,6 +19,11 @@ MAP,2022,data/cache/ptagis/mrr/MAP/mrr_MAP_2022.rds,3c1bc775ef1910b3d2745624b6c0
 MAP,2023,data/cache/ptagis/mrr/MAP/mrr_MAP_2023.rds,b1ad9f48319971679efd486b0b3ee8af,353,15563,12677
 MAP,2024,data/cache/ptagis/mrr/MAP/mrr_MAP_2024.rds,d539e60f4c7ca470e4b1870519d176a6,271,13983,12257
 MAP,2025,data/cache/ptagis/mrr/MAP/mrr_MAP_2025.rds,00026ea06c5edc03b20f3472ff5bf254,454,15319,13165
+OGR,2021,data/cache/ptagis/mrr/OGR/mrr_OGR_2021.rds,fab73a4d6c023abfe7764278e0f919dc,540,18364,18227
+OGR,2022,data/cache/ptagis/mrr/OGR/mrr_OGR_2022.rds,c514bad4c9092091ad0aa16bdafee053,575,21773,21134
+OGR,2023,data/cache/ptagis/mrr/OGR/mrr_OGR_2023.rds,9f1797ae77805ad6270b718249d9ac63,609,27798,20765
+OGR,2024,data/cache/ptagis/mrr/OGR/mrr_OGR_2024.rds,b09fb4d051fd487ee60ae13771de066c,830,28862,21502
+OGR,2025,data/cache/ptagis/mrr/OGR/mrr_OGR_2025.rds,223907d158800ee54c0c14463f9322ef,833,28654,25328
 PJC,2021,data/cache/ptagis/mrr/PJC/mrr_PJC_2021.rds,f563928133cd5c4e54968bb06c30fd70,10,7042,6917
 PJC,2022,data/cache/ptagis/mrr/PJC/mrr_PJC_2022.rds,21f5967b619fcc73d0c66c8f06c92156,7,6097,6001
 PJC,2023,data/cache/ptagis/mrr/PJC/mrr_PJC_2023.rds,3c9fa15021dcbf3f7adbafff1bf74bd4,6,6165,6087
@@ -29,3 +34,8 @@ SCS,2022,data/cache/ptagis/mrr/SCS/mrr_SCS_2022.rds,fcaa5c14ed5e0312cf901885c8ec
 SCS,2023,data/cache/ptagis/mrr/SCS/mrr_SCS_2023.rds,aeb168c7a020efe09c53ed3604208aa1,164,117802,106484
 SCS,2024,data/cache/ptagis/mrr/SCS/mrr_SCS_2024.rds,03898e5eee7d1f3b92fd690efc2eb44c,174,153938,139346
 SCS,2025,data/cache/ptagis/mrr/SCS/mrr_SCS_2025.rds,d4de0a7b178743f0bc298ae0025d8330,157,143562,127254
+SFC,2021,data/cache/ptagis/mrr/SFC/mrr_SFC_2021.rds,cd9d5401b423f5ef2cf45f573e36b1bb,221,1015,130
+SFC,2022,data/cache/ptagis/mrr/SFC/mrr_SFC_2022.rds,1948d9064ae14d6dd59d949d548a17e7,395,1516,235
+SFC,2023,data/cache/ptagis/mrr/SFC/mrr_SFC_2023.rds,fa66ceca732044050e5c5a1eff2c65fd,234,2935,751
+SFC,2024,data/cache/ptagis/mrr/SFC/mrr_SFC_2024.rds,0cda02f81daa2928f7b6bb498767d1ac,335,2942,950
+SFC,2025,data/cache/ptagis/mrr/SFC/mrr_SFC_2025.rds,399d563ebcf236862e968aecf51a1100,162,2178,316

@@ -35,3 +35,13 @@ PJC,2025,downloaded,35,35,9082,2026-11-19T08:11:18Z,2026-11-19T08:11:56Z,C:/Git/
 PJC,2026,downloaded,21,21,2130,2026-11-19T08:11:56Z,2026-11-19T08:12:10Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/PJC/mrr_PJC_2026.rds,NA
 SCS,2025,downloaded,157,157,143562,2026-11-19T08:12:10Z,2026-11-19T08:18:40Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SCS/mrr_SCS_2025.rds,NA
 SCS,2026,downloaded,116,116,116838,2026-11-19T08:18:41Z,2026-11-19T08:23:12Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SCS/mrr_SCS_2026.rds,NA
+OGR,2021,downloaded,540,540,18364,2026-11-23T11:35:04Z,2026-11-23T11:37:57Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/OGR/mrr_OGR_2021.rds,NA
+OGR,2022,downloaded,575,575,21773,2026-11-23T11:37:57Z,2026-11-23T11:41:03Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/OGR/mrr_OGR_2022.rds,NA
+OGR,2023,downloaded,609,609,27798,2026-11-23T11:41:03Z,2026-11-23T11:44:18Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/OGR/mrr_OGR_2023.rds,NA
+OGR,2024,downloaded,830,830,28862,2026-11-23T11:44:18Z,2026-11-23T11:48:06Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/OGR/mrr_OGR_2024.rds,NA
+OGR,2025,downloaded,833,833,28654,2026-11-23T11:48:06Z,2026-11-23T11:52:24Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/OGR/mrr_OGR_2025.rds,NA
+SFC,2021,downloaded,221,221,1015,2026-11-23T11:52:25Z,2026-11-23T11:53:25Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SFC/mrr_SFC_2021.rds,NA
+SFC,2022,downloaded,395,395,1516,2026-11-23T11:53:25Z,2026-11-23T11:55:03Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SFC/mrr_SFC_2022.rds,NA
+SFC,2023,downloaded,234,234,2935,2026-11-23T11:55:03Z,2026-11-23T11:56:09Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SFC/mrr_SFC_2023.rds,NA
+SFC,2024,downloaded,335,335,2942,2026-11-23T11:56:09Z,2026-11-23T11:57:38Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SFC/mrr_SFC_2024.rds,NA
+SFC,2025,downloaded,162,162,2178,2026-11-23T11:57:38Z,2026-11-23T11:58:23Z,C:/Git/SnakeRiverJuvSurv/data/cache/ptagis/mrr/SFC/mrr_SFC_2025.rds,NA

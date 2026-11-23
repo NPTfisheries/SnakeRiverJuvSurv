@@ -3,7 +3,7 @@
 # Author(s): Mike Ackerman, Michelle Briggs, and Ryan Kinzer
 # 
 # Date Created: November 18, 2026
-#   Last Modified: November 19, 2026
+#   Last Modified: November 23, 2026
 #
 # Purpose: Inventory, retrieve, and cache PTAGIS MRR data by project and file year
 #
@@ -25,12 +25,14 @@ library(PITmodelR)
 #---------------------------------------------
 # SELECT PROJECT/YEAR COMBINATIONS TO RETRIEVE
 project_codes_of_interest = c(
+  "BDA",                        # Bill Arnsberg Projects (NPT OFO)
   "CDR",                        # Craig Rabe Projects
   "GAA",                        # Gordon Axel Projects (NOAA)
+  "MAP",                        # McCall Anadromous Projects
+  "OGR",                        # ODFW Grande Ronde River Research Projects
   "PJC",                        # Grande Ronde Supplementation LR M&E (NPT NE OR)
   "SCS",                        # Sherman Sprague Projects (NPT OFO)
-  "BDA",                        # Bill Arnsberg Projects (NPT OFO)
-  "MAP"                         # McCall Anadromous Projects
+  "SFC"                         # South Fork Clearwater River Monitoring
 )
 
 calendar_years_of_interest = 2021L:2025L

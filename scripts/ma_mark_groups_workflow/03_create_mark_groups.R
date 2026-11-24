@@ -11,8 +11,8 @@
 # NOTES:
 # - Both Mark and Recapture events are eligible release events.
 # - Retain the earliest eligible event per PIT tag within each mark group.
-# - A PIT tag may occur in multiple groups following subsequent releases.
-# - Biological flags and initial classifications are defined in 02_prep_mark_data.R.
+# - A PIT tag may occur in multiple groups e.g., initial marks and downstream recaps.
+# - Exclusion flags and initial seasons, method_groups, etc. are defined in 02_prep_mark_data.R.
 
 # clear environment
 rm(list = ls())

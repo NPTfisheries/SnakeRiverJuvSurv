@@ -1,7 +1,57 @@
-# EXPORT JUVENILE MARK GROUPS
-# Save a snapshot of the configuration and group results, plus one or more
-# headerless PIT-tag lists per qualifying group. Keep mark data in one RDS.
-
+#' @title Export Juvenile PIT-Tag Mark Groups
+#'
+#' @description
+#' Export qualifying juvenile PIT-tag mark groups, associated mark data, configuration settings, and group summaries for downstream
+#' analyses and reproducibility.
+#'
+#' @details
+#' This function exports the results of \code{\link{create_mark_groups}} to a timestamped directory
+#' organized by \code{config$analysis_id}.
+#'
+#' The export contains:
+#' \itemize{
+#'   \item \code{config.yml}: Copy of the original YAML configuration.
+#'   \item \code{mark_group_summary.csv}: Available and selected mark groups, including sample sizes and QC summaries.
+#'   \item \code{final_marks.rds}: Consolidated dataset containing eligible records from all qualifying mark groups.
+#'   \item \code{tag_list_manifest.csv}: Group identifiers, definitions, tag-list filenames, file parts, and tag counts.
+#'   \item \code{tag_lists/}: Individual headerless PIT-tag text files for use with PTAGIS.
+#' }
+#'
+#' Each tag-list file contains one PIT tag per line, with no header. Filenames identify the species/run, rear, method group,
+#' season/life-stage category, release site, and release year.
+#'
+#' Groups exceeding \code{max_tags_per_file} are divided into sequentially numbered text files. The consolidated RDS retains
+#' all qualifying groups in a single dataset, allowing downstream analyses to select groups without recompiling separate RDS files.
+#'
+#' The function is intended to be called when the workflow is configured with \code{mode = "export"}. It does not modify the
+#' original prepared data or configuration file.
+#'
+#' @param results List containing \code{mark_group_summary} and \code{final_marks}, returned by \code{\link{create_mark_groups}}.
+#' @param config Named list of user-defined mark-group settings, including \code{analysis_id}.
+#' @param config_file Path to the original YAML configuration file to copy into the export directory.
+#' @param output_dir Parent directory for exported mark groups. Defaults to \code{data/processed/mark_groups} relative to the
+#'   project directory identified by \code{here::here()}.
+#' @param max_tags_per_file Maximum number of PIT tags written to an individual text file. Defaults to 15000.
+#'
+#' @return Invisibly returns the path to the created export directory.
+#'   Outputs are saved under:
+#'   \code{<output_dir>/<analysis_id>/export_<timestamp>/}.
+#'
+#' @examples
+#' \dontrun{
+#' export_dir <- export_mark_groups(
+#'   results = results,
+#'   config = config,
+#'   config_file = config_file
+#' )
+#' }
+#'
+#' @seealso \code{\link{create_mark_groups}},
+#'   \code{\link{validate_mark_config}}
+#'
+#' @author Mike Ackerman
+#'
+#' @export
 export_mark_groups = function(results, 
                               config, 
                               config_file,
@@ -39,7 +89,7 @@ export_mark_groups = function(results,
   if (anyDuplicated(groups$group_id)) stop("Group IDs collide after filename cleanup.")
 
   # create export directory
-  export_id  = paste0("export_", format(Sys.time(), "%Y%m%d_%H%M"))
+  export_id  = paste0("export_", format(Sys.time(), "%Y%m%d_%H%M", tz = "America/Denver"))
   export_dir = file.path(output_dir, config$analysis_id, export_id)
   dir.create(file.path(export_dir, "tag_lists"), recursive = TRUE)
 

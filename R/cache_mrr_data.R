@@ -1,40 +1,39 @@
-#' Cache PTAGIS MRR Data
+#' @title Retrieve and Cache PTAGIS MRR Data
 #'
 #' @description
-#' Retrieve and cache PTAGIS mark-recapture-recovery (MRR) data for a single project code and year.
+#' Retrieve and cache PTAGIS mark-recapture-recovery (MRR) data for a specified project code and file year.
 #'
 #' @details
-#' This function uses `PITmodelR::get_mrr_files()` to identify submitted files 
-#' and `PITmodelR::get_batch_file_data()` to retrieve their contents.
+#' The function uses \code{PITmodelR::get_mrr_files()} to identify submitted MRR files 
+#' and \code{PITmodelR::get_batch_file_data()} to retrieve their contents.
 #'
-#' Data are cached separately by project and year. Existing caches are skipped unless `refresh = TRUE`, in which case
-#' the cache is replaced following successful retrieval and validation.
+#' Data are cached separately by project and file year at \code{<cache_dir>/<project_code>/mrr_<project_code>_<year>.rds}.
+#' Existing caches are reused unless \code{refresh = TRUE}, in which case the cache is replaced following successful retrieval.
 #'
-#' The cached RDS contains the original `sessions`, `events`, and `pdv_map` tables, plus `file_inventory` and `retrieval`
-#' metadata. PDVs are attached but not mapped.
+#' Each cached RDS contains the original \code{sessions}, \code{events}, and \code{pdv_map} tables, along with \code{file_inventory} 
+#' and \code{retrieval} metadata. SPDV and PDV variables are attached but not mapped to descriptive column names.
 #'
-#' No biological filtering is performed during retrieval.
+#' Failed retrievals produce a warning and return a status indicating failure. Previously cached data are not intentionally 
+#' removed when retrieval fails.
 #'
-#' @param project_code Three-character PTAGIS project code.
-#' @param year Four-digit PTAGIS file calendar year.
+#' @param project_code Three-character PTAGIS MRR project code.
+#' @param year Four-digit PTAGIS MRR file year.
 #' @param cache_dir Parent directory for cached MRR data.
-#' @param refresh Logical. If TRUE, re-download and replace existing data. Defaults to FALSE.
+#' @param refresh Logical. If TRUE, retrieve and replace an existing cache. Defaults to FALSE.
 #' @param page_size Number of file records requested per API page. Defaults to 1000.
 #'
 #' @return A one-row tibble containing:
 #' \describe{
 #'   \item{project_code}{PTAGIS project code.}
-#'   \item{year}{PTAGIS file year.}
-#'   \item{status}{One of "cached", "downloaded",
-#'     "refreshed", "no_files", or "failed".}
+#'   \item{year}{PTAGIS MRR file year.}
+#'   \item{status}{One of "cached", "downloaded", "refreshed", "no_files", or "failed".}
 #'   \item{n_files}{Number of MRR files retrieved.}
-#'   \item{n_sessions}{Number of session records.}
-#'   \item{n_events}{Number of event records.}
-#'   \item{n_pdv_definitions}{Number of PDV definitions.}
+#'   \item{n_sessions}{Number of session records retrieved.}
+#'   \item{n_events}{Number of event records retrieved.}
 #'   \item{cache_path}{Path to the cached RDS file.}
-#'   \item{attempted_dttm}{Date-time time of retrieval attempt. tz = "America/Denver".}
-#'   \item{retrieved_dttm}{Date-time time of successful retrieval. tz = "America/Denver".}
-#'   \item{error}{Error message, if retrieval failed.}
+#'   \item{attempted_dttm}{Formatted retrieval-attempt date and time.}
+#'   \item{retrieved_dttm}{Formatted successful-retrieval date and time.}
+#'   \item{error}{Error message if retrieval failed.}
 #' }
 #'
 #' @examples
@@ -48,7 +47,11 @@
 #' mrr <- readRDS(result$cache_path)
 #' }
 #'
-#' @seealso `PITmodelR::get_mrr_files()`, `PITmodelR::get_batch_file_data()`
+#' @seealso \code{PITmodelR::get_mrr_files()},
+#'   \code{PITmodelR::get_batch_file_data()},
+#'   \code{\link{compile_mrr_mark_events}}
+#'
+#' @author Mike Ackerman
 #'
 #' @export
 cache_mrr_data <- function(project_code,
@@ -86,14 +89,13 @@ cache_mrr_data <- function(project_code,
   
   had_cache <- file.exists(cache_path)
   
-  attempted_dttm <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "America/Denver")
+  attempted_dttm <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z",, tz = "America/Denver")
   
   # result summary helper
   make_result <- function(status,
                           n_files           = NA_integer_,
                           n_sessions        = NA_integer_,
                           n_events          = NA_integer_,
-                          n_pdv_definitions = NA_integer_,
                           retrieved_dttm    = NA_character_,
                           error             = NA_character_) {
     
@@ -180,7 +182,7 @@ cache_mrr_data <- function(project_code,
     }
     
     # add retrieval metadata
-    retrieved_dttm <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "America/Denver")
+    retrieved_dttm <- format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z",, tz = "America/Denver")
     
     mrr$file_inventory <- files
     

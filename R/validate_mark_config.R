@@ -1,6 +1,42 @@
-# VALIDATE MARK-GROUP CONFIGURATION
-# Check that YAML definitions are unambiguous; return lookup tables
-
+#' @title Validate A Mark-Group Configuration File
+#'
+#' @description
+#' Validate user-defined mark-group settings and construct lookup tables for classifying and grouping PTAGIS MRR events.
+#'
+#' @details
+#' This function accepts a configuration list, typically loaded from a YAML file using \code{yaml::read_yaml()}.
+#'
+#' @param config Named list containing mark-group configuration settings, typically read from a YAML file.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{species_lookup}{Tibble mapping PTAGIS SRR prefixes to enabled species/run groups.}
+#'   \item{method_lookup}{Tibble mapping capture-method and rear-type combinations to enabled method groups.}
+#'   \item{season_lookup}{Tibble mapping species/run and calendar month-day combinations to season/life-stage categories.}
+#'   \item{enabled_methods}{Names of enabled method groups.}
+#'   \item{enabled_rear}{Names of enabled rearing types.}
+#'   \item{release_years}{Configured calendar release years, or NULL if all years are included.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' config <- yaml::read_yaml(
+#'   "config/mark_groups/<your_config_file>.yml"
+#' )
+#'
+#' lookups <- validate_mark_config(config)
+#'
+#' lookups$species_lookup
+#' lookups$method_lookup
+#' lookups$season_lookup
+#' }
+#'
+#' @seealso \code{\link{create_mark_groups}},
+#'   \code{\link{export_mark_groups}}
+#'
+#' @author Mike Ackerman
+#'
+#' @export
 validate_mark_config = function(config) {
   
   # check whether mode is valid

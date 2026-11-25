@@ -1,7 +1,55 @@
-# CREATE JUVENILE MARK GROUPS
-# Inventory overall enabled groups, evaluate selected release sites, and retain
-# one eligible record per PIT tag in each qualifying group.
-
+#' @title Create and Evaluate Juvenile PIT-Tag Mark Groups
+#'
+#' @description
+#' Create PIT-tag mark groups from prepared PTAGIS MRR events using user-defined species, methods, seasons, 
+#' release sites, exclusions, and repeated-event rules.
+#'
+#' @details
+#' This function applies a validated mark-group configuration to prepared Mark and Recapture events produced by \code{\link{compile_mrr_mark_events}}.
+#'
+#' Each mark group is defined by six variables:
+#' \code{species_run}, \code{rear}, \code{release_year},
+#' \code{method_group}, \code{release_site}, and \code{season_life_stage}.
+#'
+#' @param mark_events Tibble of prepared PTAGIS Mark and Recapture events, typically returned by \code{\link{compile_mrr_mark_events}}.
+#' @param config Named list of user-defined mark-group settings, typically loaded from a YAML file.
+#' @param lookups List of validated species, method, and season lookup tables returned by \code{\link{validate_mark_config}}.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{mark_group_summary}{Tibble containing all available groups within the broadly enabled configuration. Includes the six
+#'     group-defining variables, starting PIT-tag counts, selection status, and, for selected groups, final PIT-tag counts,
+#'     exclusions, repeated-event counts, and minimum sample size status. QC and final-count fields are NA for unselected groups.}
+#'   \item{final_marks}{Tibble containing one eligible event record per PIT tag within each selected group meeting the minimum
+#'     tag threshold. Includes the original PTAGIS attributes and the six group-defining variables.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' config <- yaml::read_yaml(
+#'   "config/mark_groups/<your_config_file>.yml"
+#' )
+#'
+#' lookups <- validate_mark_config(config)
+#'
+#' mark_events <- readRDS(file.path(
+#'   "data", "processed", "prepped_marks",
+#'   config$prep_id, "mark_events.rds"
+#' ))
+#'
+#' results <- create_mark_groups(mark_events, config, lookups)
+#'
+#' results$mark_group_summary
+#' results$final_marks
+#' }
+#'
+#' @seealso \code{\link{compile_mrr_mark_events}},
+#'   \code{\link{validate_mark_config}},
+#'   \code{\link{export_mark_groups}}
+#'
+#' @author Mike Ackerman
+#'
+#' @export
 create_mark_groups = function(mark_events, config, lookups) {
   
   group_vars = c("species_run", "rear", "release_year", "method_group", "release_site", "season_life_stage")

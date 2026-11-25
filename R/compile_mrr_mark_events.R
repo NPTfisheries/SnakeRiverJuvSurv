@@ -1,8 +1,51 @@
-# COMPILE CACHED PTAGIS MRR MARK EVENTS
-#
-# Read selected project/year caches, join sessions to events within each cache,
-# and retain all Mark and Recapture records for downstream mark-group creation.
-
+#' @title Compile Cached PTAGIS MRR Mark and Recapture Events
+#'
+#' @description
+#' Compile previously cached PTAGIS MRR Mark and Recapture events into a single dataset for downstream mark-group creation.
+#'
+#' @details
+#' This function discovers MRR caches created by \code{\link{cache_mrr_data}} and optionally filters them by project
+#' code and PTAGIS file year. Setting \code{project_codes} or \code{cache_years} to NULL compiles all available caches.
+#'
+#' For each selected cache, session attributes are joined to event records using \code{file_name}. Only records with
+#' \code{event_type} equal to "Mark" or "Recapture" are retained. Both event types represent potential release occasions.
+#'
+#' The original PTAGIS fields, including attached SPDV and PDV values, are retained. The function also adds \code{cache_project},
+#' \code{cache_year}, \code{event_year}, and \code{release_year}. The latter two are derived from PTAGIS event and release dates.
+#'
+#' A source manifest is created which records the contributing caches, their MD5 checksums, and record counts. 
+#' Original SPDV/PDV definitions remain in the source caches.
+#'
+#' @param cache_dir Parent directory containing cached PTAGIS MRR project/year RDS files.
+#' @param project_codes Character vector of PTAGIS project codes to include. NULL includes all available projects.
+#' @param cache_years Numeric vector of PTAGIS MRR file years to include. NULL includes all available years.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{mark_events}{Tibble containing all selected Mark and Recapture events, joined with their session attributes
+#'     and associated cache, event-year, and release-year fields.}
+#'   \item{source_manifest}{Tibble containing one row per selected cache, with project code, file year, source path, MD5
+#'     checksum, and counts of sessions, total events, and Mark/Recapture events.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' prepared <- compile_mrr_mark_events(
+#'   cache_dir = "data/cache/ptagis/mrr",
+#'   project_codes = c("CDR", "GAA"),
+#'   cache_years = 2021:2025
+#' )
+#'
+#' mark_events <- prepared$mark_events
+#' source_manifest <- prepared$source_manifest
+#' }
+#'
+#' @seealso \code{\link{cache_mrr_data}},
+#'   \code{\link{create_mark_groups}}
+#'
+#' @author Mike Ackerman
+#'
+#' @export
 compile_mrr_mark_events = function(cache_dir, 
                                    project_codes = NULL, 
                                    cache_years = NULL) {

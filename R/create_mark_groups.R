@@ -1,6 +1,6 @@
 # CREATE JUVENILE MARK GROUPS
-# Inventory broadly enabled groups, evaluate YAML-selected sites, and retain
-# one eligible release record per PIT tag in each qualifying group.
+# Inventory overall enabled groups, evaluate selected release sites, and retain
+# one eligible record per PIT tag in each qualifying group.
 
 create_mark_groups = function(mark_events, config, lookups) {
   
@@ -16,9 +16,10 @@ create_mark_groups = function(mark_events, config, lookups) {
   
   available_marks = mark_events |>
     dplyr::mutate(
-      species_run = species,
-      rear        = substr(raw_srr, 3, 3),
-      release_md  = format(as.Date(release_date), "%m-%d")
+      species_run    = species,
+      rear           = substr(raw_srr, 3, 3),
+      release_md     = format(as.Date(release_date), "%m-%d"),
+      qc_invalid_pit = stringr::str_trim(dplyr::coalesce(as.character(pit_tag), "")) %in% c("", "..........")
     ) |>
     dplyr::filter(
       !is.na(species_run),
@@ -42,7 +43,7 @@ create_mark_groups = function(mark_events, config, lookups) {
   available_groups = available_marks |>
     dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
     dplyr::summarise(
-      n_start_tags = dplyr::n_distinct(pit_tag[!is.na(pit_tag) & !stringr::str_trim(pit_tag) %in% c("", "..........")]),
+      n_start_tags = dplyr::n_distinct(pit_tag[!qc_invalid_pit]),
       .groups = "drop"
     )
   
@@ -64,10 +65,11 @@ create_mark_groups = function(mark_events, config, lookups) {
   candidates = available_marks |>
     dplyr::semi_join(allowed_sites, by = c("method_group", "release_site")) |>
     dplyr::mutate(
-      qc_invalid_pit = is.na(pit_tag) | stringr::str_trim(dplyr::coalesce(pit_tag, "")) %in% c("", ".........."),
-      qc_missing_other = is.na(event_date) | is.na(release_date) | is.na(release_year) | is.na(release_site) |
-        stringr::str_trim(dplyr::coalesce(release_site, "")) == "",
-      qc_unassigned_season_life_stage = season_life_stage == "unassigned"
+      qc_missing_other = is.na(event_date) |
+        is.na(release_date) |
+        is.na(release_site) |
+        stringr::str_trim(dplyr::coalesce(release_site, "")) == "" |
+        season_life_stage == "unassigned"
     )
   
   exclusion_cols = character()
@@ -80,7 +82,7 @@ create_mark_groups = function(mark_events, config, lookups) {
     exclusion_cols = c(exclusion_cols, column)
   }
   
-  qc_cols = c("qc_invalid_pit", "qc_missing_other", "qc_unassigned_season_life_stage", exclusion_cols)
+  qc_cols = c("qc_invalid_pit", "qc_missing_other", exclusion_cols)
   candidates = candidates |>
     dplyr::mutate(qc_exclude = dplyr::if_any(dplyr::all_of(qc_cols), identity))
   
@@ -89,9 +91,8 @@ create_mark_groups = function(mark_events, config, lookups) {
     dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
     dplyr::summarise(
       n_invalid_pit           = sum(qc_invalid_pit),
-      n_missing_or_unassigned = sum(qc_missing_other | qc_unassigned_season_life_stage),
+      n_missing_or_unassigned = sum(qc_missing_other),
       dplyr::across(dplyr::all_of(exclusion_cols), ~ sum(.x), .names = "n_{.col}"),
-      n_excluded_events       = sum(qc_exclude),
       n_eligible_events       = sum(!qc_exclude),
       n_final_tags            = dplyr::n_distinct(pit_tag[!qc_exclude]),
       .groups = "drop"
@@ -113,7 +114,7 @@ create_mark_groups = function(mark_events, config, lookups) {
     ) |>
     dplyr::select(
       dplyr::all_of(group_vars), selected, n_start_tags, n_final_tags,
-      n_tags_removed, keep_group, n_excluded_events, n_repeats_removed,
+      n_tags_removed, keep_group, n_repeats_removed,
       n_invalid_pit, n_missing_or_unassigned, dplyr::all_of(exclusion_counts)
     ) |>
     dplyr::arrange(dplyr::across(dplyr::all_of(group_vars)))

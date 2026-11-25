@@ -138,7 +138,10 @@ create_mark_groups = function(mark_events, config, lookups) {
   # each retained row corresponds to one eligible PIT tag within one group.
   stopifnot(nrow(final_marks) == sum(selected_summary$n_final_tags[selected_summary$keep_group]))
   
-  list(mark_group_summary = mark_group_summary, final_marks = final_marks)
+  list(
+    mark_group_summary = mark_group_summary, 
+    final_marks = final_marks
+  )
   
 }
 

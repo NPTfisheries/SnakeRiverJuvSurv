@@ -2,6 +2,11 @@
 # Check that YAML definitions are unambiguous; return lookup tables
 
 validate_mark_config = function(config) {
+  
+  # check whether mode is valid
+  if (!identical(config$mode, "preview") && !identical(config$mode, "export")) {
+    stop("mode must be preview or export.")
+  }
 
   # check whether prep_id is valid
   if (!is.character(config$prep_id) || length(config$prep_id) != 1L || is.na(config$prep_id) || !nzchar(config$prep_id)) {
@@ -20,6 +25,11 @@ validate_mark_config = function(config) {
       config$min_tags < 1 ||
       config$min_tags != trunc(config$min_tags)) {
     stop("min_tags must be a positive whole number.")
+  }
+  
+  # check whether analysis_id is valid
+  if (length(config$analysis_id) != 1L || is.na(config$analysis_id) || !grepl("^[A-Za-z0-9][A-Za-z0-9_-]*$", config$analysis_id)) {
+    stop("analysis_id must contain only letters, numbers, underscores, or hyphens.")
   }
 
   # check whether at least one species/run, method, and rear type is enabled

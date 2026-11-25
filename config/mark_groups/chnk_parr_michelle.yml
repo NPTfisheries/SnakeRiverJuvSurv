@@ -10,7 +10,7 @@
 
 # INPUT AND RUN MODE
 prep_id: prep_20261124_1509             # prepped mark id/directory used for input
-analysis_id: chnk_parr_michele          # name for analysis
+analysis_id: chnk_parr_michelle         # name for analysis
 mode: preview                           # preview = examine groups and QC; export = write approved mark group data
 
 # RELEASE YEARS: calendar year of release_date; NOT MRR cache/file year.
@@ -87,9 +87,9 @@ method_group:
       - LOLOC
   SCREWT:
     enabled: true
-    codes: [JOHTRP]
+    codes: [SCREWT]
     rear: [W]
-    sites: all
+    sites: [JOHTRP, LOSTIR, MINAMR, SFSRKT]
 
 # SEASONS / LIFE STAGE: define one or more release-date categories for each enabled species.
 # Each named season becomes part of the mark-group ID. Three accepted formats:
@@ -105,8 +105,7 @@ method_group:
 # from final groups; however, their records remain visible for preview.
 season_life_stage:
   SpSu_Chinook:
-    summer: [7, 8]
-    fall:   [9, 10, 11, 12]
+    parr: [7, 8, 9, 10, 11, 12]
 
 # EXCLUSIONS: enabled: true removes events with the listed PTAGIS conditional_comment codes.
 # species: all applies across all enabled species; alternatively list species, e.g., [SpSu_Chinook, Fall_Chinook].

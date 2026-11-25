@@ -24,23 +24,22 @@ library(tidyverse)
 library(here)
 library(yaml)
 
-#--------------------------
-# LOAD CONFIGURATION & DATA
-config_file = here("config", "mark_groups", "mark_groups_test.yml")
+#------------------------
+# LOAD CONFIGURATION FILE
+config_file = here("config", "mark_groups", "chnk_parr_michelle.yml")
 config      = yaml::read_yaml(config_file)
 
-# source functions
 source(here("R", "validate_mark_config.R"))
-source(here("R", "create_mark_groups.R"))
 
 # validate the configuration file
 lookups = validate_mark_config(config)
 
+#-------------------
+# CREATE MARK GROUPS
+source(here("R", "create_mark_groups.R"))
+
 # load mark/recapture events for prep_id
 mark_events = readRDS(here("data", "processed", "prepped_marks", config$prep_id, "mark_events.rds"))
-
-#------------------------------
-# CREATE AND REVIEW MARK GROUPS
 
 results = create_mark_groups(mark_events, config, lookups)
 
@@ -49,7 +48,12 @@ message("Available mark groups: ",            nrow(results$mark_group_summary), 
         "Selected groups meeting min_tags: ", sum(results$mark_group_summary$keep_group, na.rm = TRUE), "\n",
         "Final marks in qualifying groups: ", nrow(results$final_marks))
 
-View(results$mark_group_summary)  # available and selected groups, with QC summary
-View(results$final_marks)         # one eligible release record per PIT/group
+head(results$mark_group_summary)   # available and selected groups, with QC summary
+head(results$final_marks)          # one eligible release record per PIT/group
+
+#-----------------------------------------------
+# EXPORT (ONLY WHEN mode: export IN CONFIG FILE)
+source(here("R", "export_mark_groups.R"))
+export_dir = export_mark_groups(results, config, config_file)
 
 ### END SCRIPT

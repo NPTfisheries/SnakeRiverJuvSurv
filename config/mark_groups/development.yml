@@ -1,4 +1,10 @@
 # JUVENILE MARK-GROUP CONFIGURATION
+#
+# Description: Multiple species, methods, used for development and testing
+# Maintainer: Mike Ackerman
+#
+# Created: November 24, 2026
+#   Last Modified: November 25, 2026
 # 
 # NOTES:
 #   - edit this file, not the processing logic in 03_create_mark_groups.R
@@ -7,7 +13,7 @@
 
 # INPUT AND RUN MODE
 prep_id: prep_20261124_1509             # prepped mark id/directory used for input
-analysis_id: juvenile_mark_groups_test  # name for analysis
+analysis_id: development                # name for analysis
 mode: preview                           # preview = examine groups and QC; export = write approved mark group data
 
 # RELEASE YEARS: calendar year of release_date; NOT MRR cache/file year.

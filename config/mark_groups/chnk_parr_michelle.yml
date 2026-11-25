@@ -1,0 +1,144 @@
+# JUVENILE MARK-GROUP CONFIGURATION
+#
+# Description: Somewhat replicate Michelle's analysis
+# Maintainer(s): Michelle Briggs, Mike Ackerman
+#
+# Created: November 25, 2026
+#   Last Modified:
+# 
+# NOTES:
+
+# INPUT AND RUN MODE
+prep_id: prep_20261124_1509             # prepped mark id/directory used for input
+analysis_id: chnk_parr_michele          # name for analysis
+mode: preview                           # preview = examine groups and QC; export = write approved mark group data
+
+# RELEASE YEARS: calendar year of release_date; NOT MRR cache/file year.
+# use release_years: NULL to include all years available in prepped mark data. 
+release_years: [2021, 2022, 2023, 2024, 2025]
+
+# SPECIES/RUN: toggle each group with enabled: true/false.
+# SRR prefixes are matched using the START of species_run_rear_type; keep prefixes quoted.
+# A SRR prefix must NOT be included in two enabled species/run definitions.
+species_run:
+  SpSu_Chinook:
+    enabled: true
+    srr_prefixes: ["11", "12"]
+  Fall_Chinook:
+    enabled: false   
+    srr_prefixes: ["13"]
+  Steelhead:
+    enabled: false
+    srr_prefixes: ["3"]
+
+# REAR TYPE: third character of PTAGIS SRR code (e.g., 12W)
+# These operate together with the below method-specific rear lists.
+rear:
+  W: true
+  H: false
+
+# METHOD GROUPS: toggle methods and define which PTAGIS capture_method codes belong to each.
+# A capture_method + rear combination can only appear in one enabled group.
+# sites: all considers every observed release_site for that method.
+# To limit sites, replace all with e.g., [SUMITC, LAKEC, GROUSC, BURNLC].
+method_group:
+  ROVING:
+    enabled: true
+    codes: [BSEINE, PSEINE, HOOK, SHOCK]
+    rear: [W]
+    sites: 
+      # Dry Clearwater
+      - AMERR
+      - CROOKR
+      - NEWSOC
+      - REDR
+      # Grande Ronde
+      - BEAR6C
+      - CATCNF
+      - CATCSF
+      - CATHEC
+      - GRAND2
+      - HURRIC
+      - LOSTIR
+      - MINAMR
+      - WALLOR
+      # Imnaha
+      - IMNAHR
+      # Middle Fork Salmon
+      - BEARVC
+      - BIG2C
+      - CAPEHC
+      - CHAMBC
+      - ELKC
+      - LOONC
+      - MARSHC
+      - VALEYC
+      # South Fork Salmon
+      - KNOXB
+      - LAKEC
+      - SECESR
+      - SALRSF
+      - BURNLC
+      - GROUSC
+      - JOHNSC
+      - SAEFSF
+      - SUMITC
+      # Wet Clearwater
+      - LOLOC
+  SCREWT:
+    enabled: true
+    codes: [JOHTRP]
+    rear: [W]
+    sites: all
+
+# SEASONS / LIFE STAGE: define one or more release-date categories for each enabled species.
+# Each named season becomes part of the mark-group ID. Three accepted formats:
+#   summer: [7, 8]                         # whole calendar months
+#   parr_presmolt: [7, 8, 9, 10, 11, 12]   # pool months into one life stage
+#   summer: {start: "07-15", end: "09-15"} # inclusive month/day range
+#   all_year: all                          # Jan 1 through Dec 31
+#
+# Month-day ranges repeat every release year; for date, use quoted MM-DD values.
+# Ranges crossing New Year's are supported e.g., {start: "12-01", end: "03-15"}.
+# No two defined seasons for the same species_run may overlap.
+# Dates omitted from the season definitions are "unassigned" and will be excluded,
+# from final groups; however, their records remain visible for preview.
+season_life_stage:
+  SpSu_Chinook:
+    summer: [7, 8]
+    fall:   [9, 10, 11, 12]
+
+# EXCLUSIONS: enabled: true removes events with the listed PTAGIS conditional_comment codes.
+# species: all applies across all enabled species; alternatively list species, e.g., [SpSu_Chinook, Fall_Chinook].
+# Disabled rules do not remove events.
+# Some mandatory data integrity screening (e.g., blank or dotted PIT tags, missing release information) still applies.
+exclusions:
+  mortality:
+    enabled: true
+    codes:   [M, MB, MK, MS, SM]
+    species: all
+  yearling_precocial:
+    enabled: true
+    codes:   [Y, PR]
+    species: [SpSu_Chinook]
+  concerns:
+    enabled: true
+    codes:   [B, I, DB, L]
+    species: all
+
+# REPEATED PIT TAGS: keep one eligible event per tag WITHIN a group.
+# Fish can still appear in different groups following subsequent releases.
+# Four choices (affect WHICH record is retained, not the distinct-tag count):
+#   first_event   = earliest event_date (tagging/capture session)
+#   last_event    = latest event_date
+#   first_release = earliest release_date
+#   last_release  = latest release_date
+# Ties use the other date, then file_name and sequence_number.
+repeat_rule: last_release
+
+# MINIMUM SAMPLE SIZE: distinct eligible PIT tags per group, after exclusions
+# and within-group repeat handling. All groups remain in group_summary;
+# only groups reaching this threshold are included in preview_marks.
+min_tags: 1
+
+### END CONFIGURATION
